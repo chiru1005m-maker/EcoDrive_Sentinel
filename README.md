@@ -60,12 +60,17 @@ The system is designed to run **entirely air-gapped** on edge hardware, utilizin
 | **CPU** | Ryzen 5 8645HS | LangGraph orchestration, MongoDB I/O | < 1 ms |
 
 ```
-Sensor Telemetry → Feature Engine → CNN-LSTM (NPU) → LangGraph Router → Diagnostic Report
-                                                           │
-                                               ┌───────────┴───────────┐
-                                          RUL > 20%              RUL ≤ 20%
-                                         (Healthy →             (Vector Search +
-                                          next cycle)            Llama 3 Report)
+Sensor Telemetry --> CNN-LSTM (NPU) --> LangGraph Router --> Audit Log
+                                            |                    ^
+                                +-----------+-----------+        |
+                           RUL > 20%              RUL <= 20%     |
+                          (healthy_node)       (diagnostic_node)  |
+                           GPU bypassed        Vector Search +    |
+                                               Llama 3 Report    |
+                                +-----------+-----------+        |
+                                            |                    |
+                                       [audit_node] -------------+
+                                    EU Battery Passport
 ```
 
 ---
@@ -74,40 +79,41 @@ Sensor Telemetry → Feature Engine → CNN-LSTM (NPU) → LangGraph Router → 
 
 ```mermaid
 graph TD
-    A["🔌 Sensor Telemetry<br/>(OBD-II / MongoDB)"] --> B["📡 telemetry_node<br/>[CPU]"]
-    B --> C["🧠 npu_inference_node<br/>[Ryzen AI NPU]"]
-    C --> D{"🔀 route_after_inference<br/>RUL Threshold Check"}
-    D -->|"RUL > 20%"| E["✅ END<br/>(Healthy — next cycle)"]
-    D -->|"RUL ≤ 20%"| F["🚨 diagnostic_reasoning_node<br/>[RTX 3050 GPU]"]
-    F --> G["📚 MongoDB Vector Search<br/>(cosine similarity)"]
-    F --> H["🦙 Ollama Llama 3<br/>(5.17 GB VRAM)"]
-    G --> I["📋 EU Battery Passport<br/>Diagnostic Report"]
+    A["Sensor Telemetry"] --> B["inference_node<br/>[Ryzen AI NPU]"]
+    B --> C{"logic_gate<br/>RUL Threshold"}
+    C -->|"RUL > 20%"| D["healthy_node<br/>[CPU]"]
+    C -->|"RUL <= 20%"| E["diagnostic_node<br/>[RTX 3050 GPU]"]
+    E --> F["MongoDB Vector Search"]
+    E --> G["Ollama Llama 3<br/>(5.17 GB VRAM)"]
+    F --> H["diagnostic_report"]
+    G --> H
+    D --> I["audit_node<br/>[EU Battery Passport]"]
     H --> I
-    I --> J["✅ END<br/>(Report generated)"]
+    I --> J["END"]
 
-    subgraph "NPU — AMD XDNA"
-        C
-    end
-
-    subgraph "GPU — NVIDIA RTX 3050"
-        F
-        H
-    end
-
-    subgraph "CPU — LangGraph State Machine"
+    subgraph "NPU - AMD XDNA"
         B
-        D
+    end
+
+    subgraph "GPU - NVIDIA RTX 3050"
         E
         G
     end
 
-    style C fill:#00C853,stroke:#333,color:#fff
-    style F fill:#FF6D00,stroke:#333,color:#fff
-    style D fill:#FFD600,stroke:#333
+    subgraph "CPU - LangGraph State Machine"
+        C
+        D
+        F
+        I
+    end
+
+    style B fill:#00C853,stroke:#333,color:#fff
+    style E fill:#FF6D00,stroke:#333,color:#fff
+    style C fill:#FFD600,stroke:#333
     style I fill:#00BFA5,stroke:#333,color:#fff
 ```
 
-**State Machine**: Built with **LangGraph 1.1.9** and **MemorySaver** checkpointer for fault-tolerant, stateful monitoring. Each invoke cycle runs: `telemetry_node → npu_inference_node → [conditional route] → END`.
+**State Machine**: Built with **LangGraph 1.1.9** and **MemorySaver** checkpointer. Each invoke cycle runs: `inference_node -> logic_gate -> [healthy_node | diagnostic_node] -> audit_node -> END`.
 
 ---
 
@@ -115,16 +121,17 @@ graph TD
 
 | Feature | Description |
 |---|---|
-| 🧠 **Hybrid CNN-LSTM** | Captures spatial degradation fingerprints (CNN) + temporal fade trajectories (LSTM) |
-| ⚡ **NPU Acceleration** | FP32 ONNX model runs on AMD Ryzen AI XDNA NPU via VitisAI Execution Provider |
-| 🔀 **LangGraph State Machine** | `SentinelState` TypedDict with conditional edges routing healthy/critical paths |
-| 🔍 **Local Vector Search** | Air-gapped cosine similarity over MongoDB-stored embeddings (no Atlas dependency) |
-| 🦙 **GPU-Accelerated LLM** | Ollama Llama 3 (8B, Q4_0) on RTX 3050 — 5.17 GB VRAM, fully local |
-| 🛡️ **Fault Tolerance** | MemorySaver checkpointer persists graph state across cycles |
-| 🌐 **REST API** | FastAPI with OpenAPI 3.1, Pydantic v2 validation, <50ms SLA for RUL prediction |
-| 📊 **Multi-Source Data** | Ingests NASA PCoE + CALCE datasets with schema normalization |
-| 🔒 **Air-Gapped** | Zero external API calls — all inference, reasoning, and storage run on-device |
-| 📋 **EU Compliant** | Report format follows EU Battery Regulation 2023/1542 and Battery Passport Annex XIII |
+| **Hybrid CNN-LSTM** | Captures spatial degradation fingerprints (CNN) + temporal fade trajectories (LSTM) |
+| **NPU Acceleration** | FP32 ONNX model runs on AMD Ryzen AI XDNA NPU via VitisAI Execution Provider |
+| **5-Node LangGraph** | `BatteryDiagnosticState` TypedDict with inference, logic_gate, healthy, diagnostic, and audit nodes |
+| **Audit Node** | EU Battery Passport compliance logging to MongoDB `inference_logs` collection |
+| **Local Vector Search** | Air-gapped cosine similarity over MongoDB-stored embeddings (no Atlas dependency) |
+| **GPU-Accelerated LLM** | Ollama Llama 3 (8B, Q4_0) on RTX 3050 -- 5.17 GB VRAM, fully local |
+| **Fault Tolerance** | MemorySaver checkpointer + SupervisionTree watchdog for driver crash recovery |
+| **REST API** | FastAPI with OpenAPI 3.1, Pydantic v2 validation, <50ms SLA for RUL prediction |
+| **Multi-Source Data** | Ingests NASA PCoE + CALCE datasets with schema normalization |
+| **Air-Gapped** | Zero external API calls -- all inference, reasoning, and storage run on-device |
+| **EU Compliant** | Report format follows EU Battery Regulation 2023/1542 and Battery Passport Annex XIII |
 
 ---
 
@@ -132,47 +139,48 @@ graph TD
 
 ```
 EcoDrive-Sentinel/
-│
-├── Sentinel_LangGraph.py        # ⭐ Primary: LangGraph state machine orchestrator
-├── config.py                    # Central config hub — Pydantic v2 models, settings, enums
-├── feature_engine.py            # Phase 1: Multi-source data loader + Health Indicator extraction
-├── predictive_core.py           # Phase 2: CNN-LSTM model architecture, training, ONNX export
-├── agentic_layer.py             # Phase 3: ONNX inference engine, vector search, LLM integration
-├── api.py                       # FastAPI REST API with /predict-rul and /diagnose endpoints
-├── run_pipeline.py              # Master pipeline runner (CLI entry point)
-│
-├── antigravity_agent.py         # Legacy: Reactive supervision tree orchestrator
-├── antigravity/                 # Legacy: Antigravity framework (SupervisionTree, ReactiveStream)
-│   ├── core.py
-│   └── __init__.py
-├── antigravity_config.yaml      # Edge system + inference + storage + reasoning config
-│
-├── quantize_model.py            # INT8 static quantization for Ryzen AI NPU
-├── eval_ragas.py                # RAGAS evaluation (Faithfulness & Answer Relevancy)
-├── Capacity_Fade.py             # Standalone capacity fade visualization
-├── lifecycle_verification.py    # Full air-gapped lifecycle verification test
-├── demo_prediction.py           # Quick prediction demo script
-├── check_npu.py                 # NPU hardware detection and validation
-│
-├── models/
-│   └── cnn_lstm.pt              # Trained PyTorch model checkpoint (~3.9 MB)
-├── onnx/
-│   ├── cnn_lstm.onnx            # FP32 ONNX model for CPU/NPU inference
-│   └── cnn_lstm_int8.onnx       # INT8 quantized model (experimental)
-├── data/
-│   └── feature_matrix.parquet   # Extracted feature matrix (cached)
-│
-├── NASA_PCoE_dataset/           # NASA Prognostics Center of Excellence battery data
-│   ├── metadata.csv
-│   └── data/
-├── CALCE_dataset/               # CALCE Battery Research Group data
-│   ├── Train/
-│   └── Test/
-│
-├── requirements.txt             # Python dependencies
-├── .env                         # Environment variables (MongoDB URI, LLM config, etc.)
-├── Tasks.md                     # Project roadmap & task tracker (20/20 complete)
-└── System_Health_Report.json    # Latest system health verification report
+|
+|-- agentic_layer.py             # Primary: LangGraph state machine (5 nodes + MemorySaver)
+|-- antigravity_core.py          # Standalone: LangGraph + SupervisionTree watchdog demo
+|-- Sentinel_LangGraph.py        # Continuous: Telemetry loop + NPU inference + GPU reasoning
+|-- config.py                    # Central config hub -- Pydantic v2 models, settings, enums
+|-- feature_engine.py            # Phase 1: Multi-source data loader + Health Indicator extraction
+|-- predictive_core.py           # Phase 2: CNN-LSTM model architecture, training, ONNX export
+|-- api.py                       # FastAPI REST API with /predict-rul and /diagnose endpoints
+|-- run_pipeline.py              # Master pipeline runner (CLI entry point)
+|
+|-- antigravity_agent.py         # Async: Reactive supervision tree with 500ms telemetry heartbeat
+|-- antigravity/                 # Antigravity framework (SupervisionTree, ReactiveStream)
+|   |-- core.py
+|   +-- __init__.py
+|-- antigravity_config.yaml      # Edge system + inference + storage + reasoning config
+|
+|-- quantize_model.py            # INT8 static quantization for Ryzen AI NPU
+|-- eval_ragas.py                # RAGAS evaluation (Faithfulness & Answer Relevancy)
+|-- Capacity_Fade.py             # Standalone capacity fade visualization
+|-- lifecycle_verification.py    # Full air-gapped lifecycle verification test
+|-- demo_prediction.py           # Quick prediction demo script
+|-- check_npu.py                 # NPU hardware detection and validation
+|
+|-- models/
+|   +-- cnn_lstm.pt              # Trained PyTorch model checkpoint (~3.9 MB)
+|-- onnx/
+|   |-- cnn_lstm.onnx            # FP32 ONNX model for CPU/NPU inference
+|   +-- cnn_lstm_int8.onnx       # INT8 quantized model (experimental)
+|-- data/
+|   +-- feature_matrix.parquet   # Extracted feature matrix (cached)
+|
+|-- NASA_PCoE_dataset/           # NASA Prognostics Center of Excellence battery data
+|   |-- metadata.csv
+|   +-- data/
+|-- CALCE_dataset/               # CALCE Battery Research Group data
+|   |-- Train/
+|   +-- Test/
+|
+|-- requirements.txt             # Python dependencies
+|-- .env                         # Environment variables (MongoDB URI, LLM config, etc.)
+|-- Tasks.md                     # Project roadmap & task tracker (20/20 complete)
++-- System_Health_Report.json    # Latest system health verification report
 ```
 
 ---
@@ -429,46 +437,59 @@ Predicted RUL (cycles)
 
 ---
 
-### Phase 3 — LangGraph Agentic Orchestration
+### Phase 3 -- LangGraph Agentic Orchestration
 
-**Module:** `Sentinel_LangGraph.py`
+**Module:** `agentic_layer.py`
 
-A **LangGraph state machine** with `SentinelState` TypedDict, conditional routing, and MemorySaver persistence:
+A **LangGraph state machine** with `BatteryDiagnosticState` TypedDict, 5 nodes, conditional routing, MemorySaver persistence, and EU Battery Passport audit logging:
 
 ```
-[START] → [telemetry_node] → [npu_inference_node] → [route_after_inference]
-                                                          │
-                              healthy (RUL > 20%) → [END] ←┘
-                              critical (RUL ≤ 20%) → [diagnostic_reasoning_node] → [END]
+[START] --> [inference_node] --> [logic_gate]
+                                    |
+                     +--------------+--------------+
+                     |                             |
+              RUL > 20%                     RUL <= 20%
+           [healthy_node]              [diagnostic_node]
+            GPU bypassed              Vector Search + LLM
+                     |                             |
+                     +--------------+--------------+
+                                    |
+                              [audit_node]
+                         EU Battery Passport Log
+                                    |
+                                  [END]
 ```
 
-**SentinelState Fields:**
+**BatteryDiagnosticState Fields:**
 
 | Field | Type | Description |
 |---|---|---|
-| `telemetry_buffer` | `list[dict]` | Rolling window of last 30 sensor readings |
-| `npu_rul_prediction` | `float` | Raw RUL output from CNN-LSTM |
+| `sensor_reading` | `SensorReading` | Validated Pydantic v2 sensor payload |
+| `predicted_rul` | `float` | Raw RUL output from CNN-LSTM |
 | `rul_percentage` | `float` | RUL as percentage of max life |
-| `is_critical` | `bool` | True if RUL ≤ 20% |
-| `diagnostic_report` | `str` | LLM-generated maintenance plan |
-| `active_ep` | `str` | Active ONNX execution provider |
-| `iteration` | `int` | Monitoring cycle counter |
+| `maintenance_status` | `MaintenanceStatus` | NORMAL / WARNING / CRITICAL / FAULT |
+| `ignition_status` | `bool` | Vehicle ignition state (False = graceful shutdown) |
+| `audit_log` | `list[str]` | Rolling audit trail for EU Battery Passport |
 
 **Nodes:**
 
 | Node | Hardware | Responsibility |
 |---|---|---|
-| `telemetry_node` | CPU | Polls MongoDB / generates synthetic OBD-II data, maintains rolling buffer |
-| `npu_inference_node` | NPU | Runs CNN-LSTM via VitisAI EP, computes RUL, sets `is_critical` flag |
-| `diagnostic_reasoning_node` | GPU | MongoDB vector search → retrieves repair protocols → Ollama Llama 3 generates EU-compliant report |
+| `inference_node` | NPU | Runs CNN-LSTM via VitisAI EP, computes RUL and rul_percentage |
+| `logic_gate` | CPU | Conditional router: RUL > threshold to healthy, else to diagnostic |
+| `normal_operation_node` | CPU | Bypasses GPU, logs healthy status, saves RTX 3050 power |
+| `diagnostic_node` | GPU | MongoDB vector search + Ollama Llama 3 diagnostic report |
+| `audit_node` | CPU | Writes cycle outcome to MongoDB inference_logs for EU compliance |
+
+**Standalone Orchestrator:** `antigravity_core.py` provides a self-contained version with a SupervisionTree watchdog that auto-restarts the graph on NPU/GPU driver crashes.
 
 **Vector Search:** Cosine similarity computed locally over MongoDB-stored embeddings (air-gapped, no Atlas dependency).
 
 **LLM Synthesis:** Ollama (Llama 3 8B, Q4_0, 5.17 GB on RTX 3050 VRAM) generates structured diagnostic reports with:
 - Diagnostic Summary
 - Root Cause Hypothesis
-- Recommended Actions (3–5 items)
-- Safety Classification (NORMAL / WARNING / CRITICAL)
+- Recommended Actions (3-5 items)
+- Urgency Level (IMMEDIATE / 7-DAYS / 30-DAYS)
 
 ---
 
