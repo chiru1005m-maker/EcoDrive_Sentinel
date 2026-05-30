@@ -201,7 +201,7 @@ graph TD
 | **GPU-Accelerated LLM** | Ollama Llama 3 (8B, Q4_0) on RTX 3050 -- 5.17 GB VRAM, fully local |
 | **Fault Tolerance** | MemorySaver checkpointer + SupervisionTree watchdog for driver crash recovery |
 | **REST API** | FastAPI with OpenAPI 3.1, Pydantic v2 validation, <50ms SLA for RUL prediction |
-| **Multi-Source Data** | Ingests NASA PCoE + CALCE datasets with schema normalization |
+| **Multi-Source Data** | Ingests Toyota + NASA PCoE + CALCE datasets with schema normalization |
 | **Air-Gapped** | Zero external API calls -- all inference, reasoning, and storage run on-device |
 | **EU Compliant** | Report format follows EU Battery Regulation 2023/1542 and Battery Passport Annex XIII |
 
@@ -212,46 +212,41 @@ graph TD
 ```
 EcoDrive-Sentinel/
 |
-|-- agentic_layer.py             # Primary: LangGraph state machine (5 nodes + MemorySaver)
-|-- antigravity_core.py          # Standalone: LangGraph + SupervisionTree watchdog demo
-|-- Sentinel_LangGraph.py        # Continuous: Telemetry loop + NPU inference + GPU reasoning
-|-- config.py                    # Central config hub -- Pydantic v2 models, settings, enums
-|-- feature_engine.py            # Phase 1: Multi-source data loader + Health Indicator extraction
-|-- predictive_core.py           # Phase 2: CNN-LSTM model architecture, training, ONNX export
-|-- api.py                       # FastAPI REST API with /predict-rul and /diagnose endpoints
-|-- run_pipeline.py              # Master pipeline runner (CLI entry point)
+|-- src/                         # Core source code
+|   |-- agents/
+|   |   |-- agentic_layer.py     # LangGraph state machine (5 nodes + MemorySaver)
+|   |   +-- Sentinel_LangGraph.py # Continuous: Telemetry loop + NPU inference + GPU reasoning
+|   |-- core/
+|   |   |-- config.py            # Central config hub
+|   |   |-- feature_engine.py    # Phase 1: Multi-source data loader + HI extraction
+|   |   +-- predictive_core.py   # Phase 2: CNN-LSTM architecture
+|   +-- api.py                   # FastAPI REST API with /predict-rul and /diagnose endpoints
 |
-|-- antigravity_agent.py         # Async: Reactive supervision tree with 500ms telemetry heartbeat
-|-- antigravity/                 # Antigravity framework (SupervisionTree, ReactiveStream)
-|   |-- core.py
-|   +-- __init__.py
-|-- antigravity_config.yaml      # Edge system + inference + storage + reasoning config
+|-- scripts/                     # Automation and pipeline scripts
+|   |-- run_pipeline.py          # Master pipeline runner (CLI entry point)
+|   |-- quantize_model.py        # INT8 static quantization for Ryzen AI NPU
+|   +-- eval_ragas.py            # RAGAS evaluation (Faithfulness & Answer Relevancy)
 |
-|-- quantize_model.py            # INT8 static quantization for Ryzen AI NPU
-|-- eval_ragas.py                # RAGAS evaluation (Faithfulness & Answer Relevancy)
-|-- Capacity_Fade.py             # Standalone capacity fade visualization
-|-- lifecycle_verification.py    # Full air-gapped lifecycle verification test
-|-- demo_prediction.py           # Quick prediction demo script
-|-- check_npu.py                 # NPU hardware detection and validation
+|-- tests/                       # Validation and lifecycle tests
+|   +-- test_production_pipeline.py # End-to-end integration test
+|
+|-- configs/                     # Application configurations
+|   +-- vaip_config.json         # VitisAI configuration
 |
 |-- models/
-|   +-- cnn_lstm.pt              # Trained PyTorch model checkpoint (~3.9 MB)
+|   |-- cnn_lstm_toyota.pt       # Trained PyTorch model checkpoint (Toyota corpus)
+|   +-- cnn_lstm_universal.pt    # Universal model checkpoint
 |-- onnx/
-|   |-- cnn_lstm.onnx            # FP32 ONNX model for CPU/NPU inference
-|   +-- cnn_lstm_int8.onnx       # INT8 quantized model (experimental)
-|-- data/
-|   +-- feature_matrix.parquet   # Extracted feature matrix (cached)
+|   |-- cnn_lstm_toyota.onnx               # FP32 ONNX model
+|   +-- cnn_lstm_toyota_quantized.onnx     # INT8 quantized model for NPU
 |
-|-- NASA_PCoE_dataset/           # NASA Prognostics Center of Excellence battery data
-|   |-- metadata.csv
-|   +-- data/
-|-- CALCE_dataset/               # CALCE Battery Research Group data
-|   |-- Train/
-|   +-- Test/
+|-- data/
+|   |-- processed/               # Pre-processed NumPy arrays (universal_battery_master.npy)
+|   +-- raw/                     # Raw datasets (NASA .mat files, CALCE, technical manuals)
 |
 |-- requirements.txt             # Python dependencies
 |-- .env                         # Environment variables (MongoDB URI, LLM config, etc.)
-|-- Tasks.md                     # Project roadmap & task tracker (20/20 complete)
+|-- Tasks.md                     # Project roadmap & task tracker
 +-- System_Health_Report.json    # Latest system health verification report
 ```
 
@@ -263,7 +258,7 @@ EcoDrive-Sentinel/
 |---|---|---|
 | **ML Framework** | PyTorch 2.3+ | CNN-LSTM model training |
 | **Inference Runtime** | ONNX Runtime + VitisAI 1.23.2 | NPU-accelerated model serving |
-| **NPU Backend** | AMD Vitis-AI (VitisAIExecutionProvider) | Hardware-accelerated inference on XDNA |
+| **NPU Backend** | AMD Vitis-AI (RyzenAIExecutionProvider) | Hardware-accelerated inference on XDNA |
 | **Orchestration** | LangGraph 1.1.9 + MemorySaver | Stateful graph with conditional routing |
 | **Local LLM** | Ollama (Llama 3 8B, Q4_0) | Air-gapped diagnostic reasoning on RTX 3050 GPU |
 | **Vector Store** | MongoDB + NumPy cosine similarity | Local repair protocol semantic search |
@@ -301,11 +296,13 @@ venv_312\Scripts\activate        # Windows
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Optional) Install Ryzen AI ONNX Runtime wheel for NPU support
-pip install onnxruntime_vitisai-1.23.2-cp312-cp312-win_amd64.whl --force-reinstall --no-deps
-pip install numpy==1.26.4  # Required by VitisAI build
+# 4. Install the official AMD Ryzen AI Runtime and ONNX Execution Provider hooks
+pip install target-factory
+pip install voe
 
-# 5. Initialize MongoDB replica set
+# 5. Set up your local MongoDB instance with a single-node replica set
+mongod --dbpath="C:\data\db" --replSet rs0 --port 27017
+# In a separate terminal, run once to activate vector extensions:
 mongosh --eval "rs.initiate()"
 
 # 6. Pull the Llama 3 model for local LLM reasoning
@@ -344,10 +341,10 @@ The **recommended** way to run EcoDrive-Sentinel is via the LangGraph state mach
 
 ```powershell
 # Run 20 monitoring cycles at 500ms poll rate
-.\venv_312\Scripts\python.exe Sentinel_LangGraph.py --cycles 20 --poll-ms 500
+.\venv_312\Scripts\python.exe src\agents\Sentinel_LangGraph.py --cycles 20 --poll-ms 500
 
 # Run continuously until Ctrl+C
-.\venv_312\Scripts\python.exe Sentinel_LangGraph.py
+.\venv_312\Scripts\python.exe src\agents\Sentinel_LangGraph.py
 ```
 
 **Example Output:**
@@ -363,10 +360,10 @@ The **recommended** way to run EcoDrive-Sentinel is via the LangGraph state mach
    Iterations: 20 cycles
 ============================================================
 
-🔋 Cycle 100 | RUL: 92.6 cycles (46.3%) | ✅ Healthy | Latency: 8.2ms | EP: VitisAIExecutionProvider
-🔋 Cycle 101 | RUL: 91.8 cycles (45.9%) | ✅ Healthy | Latency: 7.9ms | EP: VitisAIExecutionProvider
+🔋 Cycle 100 | RUL: 92.6 cycles (46.3%) | ✅ Healthy | Latency: 8.2ms | EP: RyzenAIExecutionProvider
+🔋 Cycle 101 | RUL: 91.8 cycles (45.9%) | ✅ Healthy | Latency: 7.9ms | EP: RyzenAIExecutionProvider
 ...
-🔋 Cycle 114 | RUL: 88.1 cycles (44.1%) | ✅ Healthy | Latency: 8.0ms | EP: VitisAIExecutionProvider
+🔋 Cycle 114 | RUL: 88.1 cycles (44.1%) | ✅ Healthy | Latency: 8.0ms | EP: RyzenAIExecutionProvider
 
 ============================================================
 📊 FINAL STATE SUMMARY
@@ -375,7 +372,7 @@ The **recommended** way to run EcoDrive-Sentinel is via the LangGraph state mach
    Last Cycle:  114
    Last RUL:    92.6 cycles (46.3%)
    Is Critical: False
-   Active EP:   VitisAIExecutionProvider
+   Active EP:   RyzenAIExecutionProvider
    Iterations:  15
 ============================================================
 ```
@@ -385,33 +382,33 @@ The **recommended** way to run EcoDrive-Sentinel is via the LangGraph state mach
 Run the complete end-to-end pipeline (Feature Engineering → Training → Agentic Demo):
 
 ```bash
-python run_pipeline.py --phase all
+python scripts/run_pipeline.py --phase all
 ```
 
 ### Individual Phases
 
 ```bash
 # Phase 1: Feature Engineering only
-python run_pipeline.py --phase features
+python scripts/run_pipeline.py --phase features
 
 # Phase 1 + 2: Features + Model Training
-python run_pipeline.py --phase train
+python scripts/run_pipeline.py --phase train
 
 # Phase 2: Override training epochs
-python run_pipeline.py --phase train --epochs 100
+python scripts/run_pipeline.py --phase train --epochs 100
 
 # Phase 3: Agentic Pipeline Demo (requires trained model)
-python run_pipeline.py --phase agent
+python scripts/run_pipeline.py --phase agent
 ```
 
 ### FastAPI Server
 
 ```bash
 # Start the REST API server
-python run_pipeline.py --phase api
+python scripts/run_pipeline.py --phase api
 
 # Or directly
-python api.py
+python src/api.py
 ```
 
 The server starts at `http://localhost:8000` with interactive docs at:
@@ -467,7 +464,7 @@ curl -X POST http://localhost:8000/api/v1/diagnose \
 
 **Module:** `feature_engine.py`
 
-Loads heterogeneous battery cycling data from **NASA PCoE** and **CALCE** datasets, normalizes schemas via a column registry, and extracts five **Health Indicators (HIs)**:
+Loads heterogeneous battery cycling data from **Toyota**, **NASA PCoE** and **CALCE** datasets, normalizes schemas via a column registry, and extracts five **Health Indicators (HIs)**:
 
 | Health Indicator | Definition | Unit |
 |---|---|---|
@@ -621,7 +618,7 @@ The diagnostic reasoning pipeline implements a **Multi-Source Retrieval-Augmente
 | Source Type | Count | Content | Embedding Strategy |
 |---|---|---|---|
 | **Structured** | 14 manufacturer fault code databases (Technical Bulletins `MC-1100xxxx`) | DTC definitions, parameter thresholds, repair procedures, wiring diagrams | Chunked at section level, embedded via `text-embedding-3-small` (1536-dim) |
-| **Unstructured** | Mercedes-Benz EQS/EQE technical manuals (PDF corpus) | Narrative diagnostic procedures, torque specs, connector pinouts | Recursive character splitting (chunk_size=1000, overlap=200), same embedding model |
+| **Telemetry** | 222,839 Unified Time-Series Windows (Toyota + NASA PCoE + CALCE) | Continuous telemetry measurements of Current, Voltage, Temp, SoC, and Health Index | Normalized [0.0, 1.0], windowed at shape (30, 5) for 1D Dilated CNN inference |
 
 Both sources are stored in **MongoDB** as vector-embedded documents. At query time, the `diagnostic_node` constructs a context-aware query from the current `BatteryDiagnosticState` (battery chemistry, voltage, temperature, RUL, DTC codes), performs **cosine similarity search** across both collections simultaneously, and assembles a ranked context window (top-3 structured + top-2 unstructured) for the LLM.
 
@@ -736,7 +733,7 @@ The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM
 |---|---|
 | **RAGAS Evaluation** | Faithfulness: **0.89** · Answer Relevancy: **0.84** |
 | **NPU Inference Latency** | Avg: **< 15ms** · P99: **< 25ms** |
-| **Throughput** | **~780 inferences/sec** on VitisAIExecutionProvider |
+| **Throughput** | **~780 inferences/sec** on RyzenAIExecutionProvider |
 | **RAM Usage** | ~500 MB peak during stress test |
 | **LLM GPU Offload** | **5.17 GB / 6 GB VRAM** (92%) on RTX 3050 |
 | **Lifecycle Test** | Full Ingest → NPU → Vector Search → Ollama loop verified air-gapped |
@@ -748,7 +745,7 @@ The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM
 
 | Metric | Value |
 |---|---|
-| **NPU Inference Latency** | < 15ms average / < 25ms P99 |
+| **NPU Inference Latency** | ~5.6ms average / < 15ms P99 |
 | **NPU Throughput** | ~780 predictions/sec |
 | **LLM Diagnostic Latency** | 2–8s (Ollama on RTX 3050 GPU) |
 | **LLM VRAM Usage** | 5.17 GB (92% of RTX 3050) |
@@ -767,6 +764,7 @@ The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM
 
 | Dataset | Source | Description |
 |---|---|---|
+| **Toyota** | Toyota Research Institute | Large-scale battery fast-charging dataset |
 | **NASA PCoE** | [NASA Prognostics Data Repository](https://www.nasa.gov/content/prognostics-center-of-excellence-data-set-repository) | Li-ion battery charge/discharge cycling data (B0005–B0056) |
 | **CALCE** | [CALCE Battery Research Group](https://calce.umd.edu/battery-data) | CS2/CX2 series cycling data from University of Maryland |
 | **Synthetic** | Built-in generator | Physically plausible degradation curves for CI/demo (exponential fade model) |
@@ -780,5 +778,5 @@ This project was developed for the **Mercedes-Benz BEVisoneers** program.
 ---
 
 <p align="center">
-  <b>EcoDrive-Sentinel v1.0</b> · Built with ⚡ on AMD Ryzen AI NPU + NVIDIA RTX 3050 GPU
+  <b>EcoDrive-Sentinel v2.0</b> · Built with ⚡ on AMD Ryzen AI NPU + NVIDIA RTX 3050 GPU
 </p>
