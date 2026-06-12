@@ -260,7 +260,7 @@ class ONNXInferenceEngine:
 
         latency_ms = (time.perf_counter() - t_start) * 1000
         # Convert fractional RUL [0, 1] to percentage [0, 100] expected by pipeline
-        return max(0.0, final_rul * 100.0), latency_ms
+        return max(0.0, min(100.0, final_rul * 100.0)), latency_ms
 
 
 # ─────────────────────────────────────────────

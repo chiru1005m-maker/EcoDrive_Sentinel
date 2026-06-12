@@ -68,8 +68,8 @@ async def stream_telemetry():
                 if response.status_code == 200:
                     resp_data = response.json()
                     # Attempt to extract predicted RUL/Status if present
-                    rul = resp_data.get('rul', 'N/A')
-                    status = resp_data.get('status', 'N/A')
+                    rul = resp_data.get('rul_percent', 'N/A')
+                    status = resp_data.get('maintenance_status', 'N/A')
                     logger.info(f"    [API OK {response.status_code}] Predicted RUL: {rul}, Status: {status}")
                 else:
                     logger.warning(f"    [API WARN {response.status_code}] Response: {response.text}")
