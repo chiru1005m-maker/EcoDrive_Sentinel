@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoDrive Sentinel | Operations Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="background-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <div class="app-container">
+        <header class="glass-panel main-header">
+            <div class="logo">
+                <span class="pulse-dot"></span>
+                <h1>EcoDrive Sentinel</h1>
+            </div>
+            <nav class="tabs">
+                <button class="tab active" data-target="inference-tab">Live Inference</button>
+                <button class="tab" data-target="training-tab">Training Monitor</button>
+
+            </nav>
+        </header>
+
+        <main class="content-area">
+            <!-- Inference Tab -->
+            <section id="inference-tab" class="tab-content active">
+                <div class="grid-layout">
+                    <div class="glass-panel control-panel">
+                        <h2>Run Diagnostic Pipeline</h2>
+                        <p class="subtitle">Submit a sensor payload to the Agentic API.</p>
+                        
+                        <form id="inference-form">
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label>Battery ID</label>
+                                    <input type="text" id="batt-id" value="B0005" required>
+                                </div>
+                                <div class="input-group">
+                                    <label>Chemistry</label>
+                                    <select id="chemistry" required style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); color: #fff; padding: 0.8rem 1rem; border-radius: 8px; outline: none;">
+                                        <option value="LiNiMnCoO2">NMC</option>
+                                        <option value="LiNiCoAlO2">NCA</option>
+                                        <option value="LiFePO4">LFP</option>
+                                        <option value="Na-ion">Na-ion</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label>Voltage (V)</label>
+                                    <input type="number" id="voltage" step="0.01" value="4.20" required>
+                                </div>
+                                <div class="input-group">
+                                    <label>Current (A)</label>
+                                    <input type="number" id="current" step="0.01" value="-2.5" required>
+                                </div>
+                            </div>
+                            <div class="input-row">
+                                <div class="input-group">
+                                    <label>Temperature (°C)</label>
+                                    <input type="number" id="temp" step="0.1" value="35.5" required>
+                                </div>
+                                <div class="input-group">
+                                    <label>Cycle Count</label>
+                                    <input type="number" id="cycle" value="120" required>
+                                </div>
+                            </div>
+                            <button type="submit" class="glow-btn">Execute Diagnostics</button>
+                        </form>
+                    </div>
+
+                    <div class="glass-panel results-panel">
+                        <h2>Diagnostic Report</h2>
+                        <div id="loading-spinner" class="hidden">
+                            <div class="spinner"></div>
+                            <p>Querying NPU & Vector DB...</p>
+                        </div>
+                        <div id="results-display" class="results-display hidden">
+                            <div class="result-card primary-result">
+                                <h3>Predicted RUL</h3>
+                                <div class="rul-value"><span id="res-rul">--</span></div>
+                            </div>
+                            <div class="result-card status-card">
+                                <h3>Status</h3>
+                                <div id="res-status" class="status-badge normal">NORMAL_OPERATION</div>
+                            </div>
+                            <div class="llm-report">
+                                <h3>Agentic Summary</h3>
+                                <p id="res-llm">Awaiting inference...</p>
+                            </div>
+                        </div>
+                        <div id="results-placeholder" class="placeholder">
+                            <p>Ready to process telemetry.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Training Tab -->
+            <section id="training-tab" class="tab-content">
+                <div class="glass-panel full-width">
+                    <div class="header-row">
+                        <h2>GPU Training Progress</h2>
+                        <div class="status-indicator">
+                            <span class="recording-dot"></span> Live Sync
+                        </div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-box">
+                            <h4>Current Epoch</h4>
+                            <div id="stat-epoch" class="stat-value">--/50</div>
+                        </div>
+                        <div class="stat-box">
+                            <h4>Train MSE</h4>
+                            <div id="stat-train-mse" class="stat-value">--</div>
+                        </div>
+                        <div class="stat-box">
+                            <h4>Val MSE</h4>
+                            <div id="stat-val-mse" class="stat-value">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-container">
+                        <canvas id="trainingChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/script.js?v=2"></script>
+</body>
+</html>

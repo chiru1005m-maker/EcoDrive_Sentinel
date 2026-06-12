@@ -1,0 +1,58 @@
+2026-06-12 13:26:30.721 | INFO     | train_universal:161 | Hardware: CUDA
+2026-06-12 13:26:30.722 | INFO     | train_universal:162 | Master tensor: C:\Users\Chiranjeevi Chiranth\OneDrive\Desktop\ML Project\data\processed\universal_battery_master.npy
+2026-06-12 13:26:30.722 | INFO     | train_universal:165 | Mapping master tensor (mmap)...
+2026-06-12 13:26:30.726 | INFO     | train_universal:183 | Using full dataset: 222,839 windows
+2026-06-12 13:26:30.756 | DEBUG    | train_universal:125 | UniversalBatteryDataset: 200,556 samples (mmap, total=222,839, shape=(222839, 30, 5))
+2026-06-12 13:26:30.757 | DEBUG    | train_universal:125 | UniversalBatteryDataset: 22,283 samples (mmap, total=222,839, shape=(222839, 30, 5))
+2026-06-12 13:26:30.758 | INFO     | train_universal:203 | Split → train: 200,556  val: 22,283  (batch=256, epochs=50)  ~9s/epoch estimated
+2026-06-12 13:26:30.759 | INFO     | train_universal:226 | Steps per epoch: 783
+2026-06-12 13:26:31.622 | INFO     | train_universal:239 | CNN_LSTM_Regressor: 1,030,593 trainable parameters
+2026-06-12 13:26:34.741 | INFO     | train_universal:256 | 
+────────────────────────────────────────────────────────────────────
+2026-06-12 13:26:34.742 | INFO     | train_universal:257 |  Epoch    Train Loss     Val MAE          LR      Time
+2026-06-12 13:26:34.742 | INFO     | train_universal:258 | ────────────────────────────────────────────────────────────────────
+2026-06-12 13:27:17.720 | INFO     | train_universal:300 |      1       0.00166     0.00682    9.99e-04    43.0s
+2026-06-12 13:27:17.755 | INFO     | train_universal:310 |   ✅ New best checkpoint  (Val MAE=0.00682)
+2026-06-12 13:27:54.240 | INFO     | train_universal:300 |      2       0.00068     0.00734    9.96e-04    36.5s
+2026-06-12 13:27:54.241 | DEBUG    | train_universal:313 |   No improvement (1/8)
+2026-06-12 13:28:25.872 | INFO     | train_universal:300 |      3       0.00044     0.00485    9.91e-04    31.6s
+2026-06-12 13:28:25.891 | INFO     | train_universal:310 |   ✅ New best checkpoint  (Val MAE=0.00485)
+2026-06-12 13:29:04.536 | INFO     | train_universal:300 |      4       0.00031     0.01023    9.84e-04    38.6s
+2026-06-12 13:29:04.536 | DEBUG    | train_universal:313 |   No improvement (1/8)
+2026-06-12 13:29:35.317 | INFO     | train_universal:300 |      5       0.00027     0.00677    9.76e-04    30.8s
+2026-06-12 13:29:35.317 | DEBUG    | train_universal:313 |   No improvement (2/8)
+2026-06-12 13:30:13.454 | INFO     | train_universal:300 |      6       0.00025     0.00639    9.65e-04    38.1s
+2026-06-12 13:30:13.454 | DEBUG    | train_universal:313 |   No improvement (3/8)
+2026-06-12 13:30:45.672 | INFO     | train_universal:300 |      7       0.00023     0.00467    9.52e-04    32.2s
+2026-06-12 13:30:45.693 | INFO     | train_universal:310 |   ✅ New best checkpoint  (Val MAE=0.00467)
+2026-06-12 13:31:22.722 | INFO     | train_universal:300 |      8       0.00025     0.00801    9.38e-04    37.0s
+2026-06-12 13:31:22.722 | DEBUG    | train_universal:313 |   No improvement (1/8)
+2026-06-12 13:32:00.189 | INFO     | train_universal:300 |      9       0.00022     0.00352    9.22e-04    37.5s
+2026-06-12 13:32:00.211 | INFO     | train_universal:310 |   ✅ New best checkpoint  (Val MAE=0.00352)
+2026-06-12 13:32:37.866 | INFO     | train_universal:300 |     10       0.00021     0.00655    9.05e-04    37.7s
+2026-06-12 13:32:37.867 | DEBUG    | train_universal:313 |   No improvement (1/8)
+2026-06-12 13:33:12.573 | INFO     | train_universal:300 |     11       0.00020     0.00380    8.85e-04    34.7s
+2026-06-12 13:33:12.573 | DEBUG    | train_universal:313 |   No improvement (2/8)
+2026-06-12 13:33:48.484 | INFO     | train_universal:300 |     12       0.00020     0.00772    8.65e-04    35.9s
+2026-06-12 13:33:48.484 | DEBUG    | train_universal:313 |   No improvement (3/8)
+2026-06-12 13:34:25.633 | INFO     | train_universal:300 |     13       0.00020     0.00575    8.42e-04    37.1s
+2026-06-12 13:34:25.633 | DEBUG    | train_universal:313 |   No improvement (4/8)
+2026-06-12 13:34:56.334 | INFO     | train_universal:300 |     14       0.00019     0.00450    8.19e-04    30.7s
+2026-06-12 13:34:56.334 | DEBUG    | train_universal:313 |   No improvement (5/8)
+2026-06-12 13:35:31.188 | INFO     | train_universal:300 |     15       0.00019     0.00603    7.94e-04    34.9s
+2026-06-12 13:35:31.188 | DEBUG    | train_universal:313 |   No improvement (6/8)
+2026-06-12 13:36:06.262 | INFO     | train_universal:300 |     16       0.00019     0.00391    7.68e-04    35.1s
+2026-06-12 13:36:06.263 | DEBUG    | train_universal:313 |   No improvement (7/8)
+2026-06-12 13:36:45.768 | INFO     | train_universal:300 |     17       0.00019     0.00578    7.41e-04    39.5s
+2026-06-12 13:36:45.768 | DEBUG    | train_universal:313 |   No improvement (8/8)
+2026-06-12 13:36:45.768 | INFO     | train_universal:315 |   ⏹  Early stopping at epoch 17 (patience=8)
+2026-06-12 13:36:45.783 | INFO     | train_universal:320 | 
+====================================================================
+2026-06-12 13:36:45.784 | INFO     | train_universal:321 | ✅ Training complete  |  Best Val MAE: 0.00352
+2026-06-12 13:36:45.784 | INFO     | train_universal:322 |    Checkpoint: C:\Users\Chiranjeevi Chiranth\OneDrive\Desktop\ML Project\models\cnn_lstm_universal.pt
+2026-06-12 13:36:45.784 | INFO     | train_universal:323 | ====================================================================
+
+2026-06-12 13:36:45.784 | INFO     | train_universal:388 | Exporting to ONNX FP32 (opset 17)...
+2026-06-12 13:36:46.397 | INFO     | train_universal:432 |   ✅ ONNX FP32 exported & validated: C:\Users\Chiranjeevi Chiranth\OneDrive\Desktop\ML Project\onnx\cnn_lstm_universal.onnx  (4037 KB)
+2026-06-12 13:36:46.842 | INFO     | train_universal:456 | Quantizing to INT8 (QDQ, static calibration)...
+2026-06-12 13:36:48.021 | INFO     | train_universal:488 |   ✅ INT8 quantized model saved: C:\Users\Chiranjeevi Chiranth\OneDrive\Desktop\ML Project\onnx\cnn_lstm_universal_quantized.onnx  (3730 KB)

@@ -1,0 +1,59 @@
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual Environments ─────────────────────────────────────
+venv/
+venv_*/
+.venv/
+env/
+
+# ── Environment & Secrets ────────────────────────────────────
+.env
+.env.*
+*.key
+
+# ── ML Artifacts ─────────────────────────────────────────────
+# Keep model checkpoints tracked but ignore large intermediate exports
+onnx/cache/
+*.onnx.data
+logs/pipeline.log
+
+# ── Data ─────────────────────────────────────────────────────
+# Raw datasets are large — track only processed parquet files
+data/raw/
+CALCE_dataset/
+NASA_PCoE_dataset/
+
+# ── OS & Editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# ── Jupyter ──────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Wheel / Build files ──────────────────────────────────────
+*.whl
+wheel_paths.txt
+pip_list.txt
+
+# ── Antigravity Agent ────────────────────────────────────────
+antigravity/
+antigravity_config.yaml
+*.npy
+data/processed/universal_battery_master.npy
+data/processed/toyota_batches/
