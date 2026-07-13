@@ -220,47 +220,50 @@ EcoDrive-Sentinel/
 |-- src/                         # Core source code
 |   |-- agents/
 |   |   |-- agentic_layer.py     # Core 5-Node LangGraph engine (API Backend & EU Audit Passport)
+|   |   |-- emergency_ingest.py  # Script to ingest RAG documents into MongoDB
 |   |   +-- Sentinel_LangGraph.py # Background Daemon CLI wrapper (Continuous 3-node loop)
 |   |-- core/
 |   |   |-- config.py            # Central config hub
 |   |   |-- feature_engine.py    # Phase 1: Multi-source data loader + HI extraction
 |   |   +-- predictive_core.py   # Phase 2: CNN-LSTM architecture
 |   |-- dashboard/               # Frontend visualization dashboard
-|   |   |-- server.py            # Dashboard server
+|   |   |-- server.py            # Dashboard server (Port 8081)
 |   |   +-- public/              # Static assets and UI components
 |   |-- model/                   # Advanced modeling and hyperparameter tuning
 |   |   +-- tune.py              # Hyperparameter optimization script
-|   +-- api.py                   # FastAPI REST API with /predict-rul and /diagnose endpoints
+|   +-- api.py                   # FastAPI REST API (Port 8000)
 |
 |-- scripts/                     # Automation and pipeline scripts
-|   |-- run_pipeline.py          # Master pipeline runner (CLI entry point)
 |   |-- train_universal.py       # Universal training loop (multi-chemistry)
 |   |-- combine_all_datasets.py  # Data merging and normalization
+|   |-- ingest_toyota_mat.py     # Parses raw Toyota matrix files
 |   |-- quantize_model.py        # INT8 static quantization for Ryzen AI NPU
+|   |-- stream_simulator.py      # Simulates live EV battery data streaming
 |   +-- eval_ragas.py            # RAGAS evaluation (Faithfulness & Answer Relevancy)
 |
 |-- tests/                       # Validation and lifecycle tests
+|   |-- test_chemistry_accuracy.py  # Evaluates NMC vs LFP precision
 |   +-- test_production_pipeline.py # End-to-end integration test
 |
 |-- configs/                     # Application configurations
-|   +-- vaip_config.json         # VitisAI configuration
+|   +-- vaip_config.json         # VitisAI Execution Provider hardware config
 |
 |-- models/
-|   |-- cnn_lstm_toyota.pt       # Trained PyTorch model checkpoint (Toyota corpus)
-|   |-- cnn_lstm_nmc.pt          # Trained PyTorch model checkpoint (NMC chemistry)
-|   +-- cnn_lstm_universal.pt    # Universal model checkpoint
+|   +-- cnn_lstm_universal.pt    # Universal PyTorch model checkpoint
+|
 |-- onnx/
-|   |-- cnn_lstm_toyota.onnx               # FP32 ONNX model
-|   |-- cnn_lstm_nmc.onnx                  # FP32 ONNX model (NMC)
-|   +-- cnn_lstm_toyota_quantized.onnx     # INT8 quantized model for NPU
+|   |-- cnn_lstm_universal.onnx            # Compiled 32-bit mathematical model
+|   |-- cnn_lstm_universal.onnx.data       # Weight bytes for 32-bit model
+|   +-- cnn_lstm_universal_quantized.onnx  # INT8 quantized model explicitly for XDNA NPU
 |
 |-- data/
 |   |-- processed/               # Pre-processed NumPy arrays (universal_battery_master.npy)
 |   +-- raw/                     # Raw datasets (NASA .mat files, CALCE, technical manuals)
 |
+|-- run_project.bat              # Master shortcut to boot the entire system
 |-- requirements.txt             # Python dependencies
 |-- .env                         # Environment variables (MongoDB URI, LLM config, etc.)
-+-- logs/System_Health_Report.json # Latest system health verification report
++-- logs/                        # System health logs and API request history
 ```
 
 ---
@@ -348,85 +351,50 @@ MAX_LATENCY_MS=50
 
 ## Usage
 
-### LangGraph Sentinel (Primary)
+### One-Click Start (Recommended)
 
-The **recommended** way to run EcoDrive-Sentinel is via the LangGraph state machine:
+The easiest way to run the entire EcoDrive-Sentinel architecture is to use the included batch shortcut. 
 
+Simply double-click **`run_project.bat`** in the root directory, or run it in your terminal:
 ```powershell
-# Run 20 monitoring cycles at 500ms poll rate
-.\venv_312\Scripts\python.exe src\agents\Sentinel_LangGraph.py --cycles 20 --poll-ms 500
+.\run_project.bat
+```
+This script will automatically open three separate windows to concurrently run:
+1. The **FastAPI Backend** (Port 8000)
+2. The **React Dashboard** (Port 8081)
+3. The **LangGraph Background Agent** (Continuous polling)
 
-# Run continuously until Ctrl+C
-.\venv_312\Scripts\python.exe src\agents\Sentinel_LangGraph.py
+---
+
+### Manual Execution (Advanced)
+
+If you prefer to run the components manually, you can execute them individually using the virtual environment:
+
+#### 1. LangGraph Sentinel Agent
+Runs the continuous background battery monitor:
+```powershell
+.\venv_312\Scripts\python.exe src\agents\Sentinel_LangGraph.py --poll-ms 1000
 ```
 
-**Example Output:**
+#### 2. FastAPI Server
+Starts the REST API backend:
+```powershell
+.\venv_312\Scripts\python.exe src\api.py
 ```
-============================================================
-🛡️  ECODRIVE-SENTINEL | LangGraph State Machine
-============================================================
-   Hardware:  CPU (LangGraph) + NPU (VitisAI) + GPU (Ollama)
-   Model:     onnx/cnn_lstm.onnx
-   Threshold: RUL ≤ 20% → Diagnostic Reasoning
-   Poll Rate: 500ms
-   Persistence: MemorySaver (checkpointed)
-   Iterations: 20 cycles
-============================================================
+*The server starts at `http://localhost:8000` with interactive docs at `http://localhost:8000/docs`.*
 
-🔋 Cycle 100 | RUL: 92.6 cycles (46.3%) | ✅ Healthy | Latency: 8.2ms | EP: RyzenAIExecutionProvider
-🔋 Cycle 101 | RUL: 91.8 cycles (45.9%) | ✅ Healthy | Latency: 7.9ms | EP: RyzenAIExecutionProvider
-...
-🔋 Cycle 114 | RUL: 88.1 cycles (44.1%) | ✅ Healthy | Latency: 8.0ms | EP: RyzenAIExecutionProvider
-
-============================================================
-📊 FINAL STATE SUMMARY
-============================================================
-   Battery:     B0005
-   Last Cycle:  114
-   Last RUL:    92.6 cycles (46.3%)
-   Is Critical: False
-   Active EP:   RyzenAIExecutionProvider
-   Iterations:  15
-============================================================
+#### 3. React Dashboard Server
+Starts the frontend UI:
+```powershell
+.\venv_312\Scripts\python.exe src\dashboard\server.py
 ```
+*The dashboard is accessible at `http://localhost:8081`.*
 
-### Full Pipeline
-
-Run the complete end-to-end pipeline (Feature Engineering → Training → Agentic Demo):
-
+#### 4. Model Training Pipeline
+To retrain the PyTorch model from scratch on the datasets:
 ```bash
-python scripts/run_pipeline.py --phase all
+.\venv_312\Scripts\python.exe scripts/train_universal.py
 ```
-
-### Individual Phases
-
-```bash
-# Phase 1: Feature Engineering only
-python scripts/run_pipeline.py --phase features
-
-# Phase 1 + 2: Features + Model Training
-python scripts/run_pipeline.py --phase train
-
-# Phase 2: Override training epochs
-python scripts/run_pipeline.py --phase train --epochs 100
-
-# Phase 3: Agentic Pipeline Demo (requires trained model)
-python scripts/run_pipeline.py --phase agent
-```
-
-### FastAPI Server
-
-```bash
-# Start the REST API server
-python scripts/run_pipeline.py --phase api
-
-# Or directly
-python src/api.py
-```
-
-The server starts at `http://localhost:8000` with interactive docs at:
-- **Swagger UI:** http://localhost:8000/docs
-- **ReDoc:** http://localhost:8000/redoc
 
 ### API Endpoints
 
