@@ -1,3 +1,6 @@
+
+
+
 """
 EcoDrive-Sentinel | Phase 2: Hybrid CNN-LSTM Predictive Core
 =============================================================
@@ -411,6 +414,16 @@ def export_to_onnx(
         )
 
     onnx_model = onnx.load(str(output_path))
+    
+    # Inject Scaler parameters as metadata
+    meta_mean = onnx_model.metadata_props.add()
+    meta_mean.key = "scaler_mean"
+    meta_mean.value = ",".join(map(str, scaler.mean_))
+    
+    meta_scale = onnx_model.metadata_props.add()
+    meta_scale.key = "scaler_scale"
+    meta_scale.value = ",".join(map(str, scaler.scale_))
+    
     onnx.save(onnx_model, str(output_path))
     logger.success(f"✓ ONNX model exported: {output_path}")
 
@@ -439,14 +452,14 @@ if __name__ == "__main__":
         engine = FeatureEngine()
         feature_df = engine.build_feature_matrix()
 
-    # Dataset Filtering: strictly isolate rows where chemistry == 'NMC'
-    if "chemistry" not in feature_df.columns:
-        logger.info("Injecting chemistry column for NASA/CALCE defaults (NMC)")
-        feature_df["chemistry"] = "NMC"
+    # Ensure all rows have a chemistry assigned
+    feature_df.loc[feature_df["source"].str.contains("TOYOTA", na=False), "chemistry"] = "LFP"
+    feature_df["chemistry"] = feature_df["chemistry"].fillna("LiNiMnCoO2")
+
+    logger.info(f"Training on all chemistries: {feature_df['chemistry'].value_counts().to_dict()}")
+
     
-    pre_filter = len(feature_df)
-    feature_df = feature_df[feature_df["chemistry"] == "NMC"]
-    logger.info(f"Filtered for NMC chemistry: {pre_filter} -> {len(feature_df)} rows")
+
 
     trainer = ModelTrainer()
     model, scaler, metrics = trainer.train(feature_df)

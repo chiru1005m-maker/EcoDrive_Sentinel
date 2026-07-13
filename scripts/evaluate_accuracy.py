@@ -13,7 +13,9 @@ from src.core.predictive_core import FEATURE_COLS, TARGET_COL, BatterySequenceDa
 
 def evaluate_accuracy():
     print("Loading data...")
-    feature_df = pd.read_parquet("data/processed/feature_matrix.parquet")
+    feature_df = pd.read_parquet("data/feature_matrix.parquet")
+    if "chemistry" in feature_df.columns:
+        feature_df = feature_df[feature_df["chemistry"] == "LiNiMnCoO2"].copy()
     
     battery_ids = feature_df["battery_id"].values
     gss = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=42)
@@ -38,7 +40,7 @@ def evaluate_accuracy():
     
     print("Loading ONNX Model...")
     session = ort.InferenceSession(
-        "onnx/cnn_lstm_universal.onnx", 
+        "onnx/cnn_lstm_nmc.onnx", 
         providers=["CPUExecutionProvider"]
     )
     input_name = session.get_inputs()[0].name

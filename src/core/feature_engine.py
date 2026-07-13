@@ -232,7 +232,7 @@ class CALCELoader:
                     df["battery_id"] = battery_id
                     df["source"] = DatasetSource.CALCE.value
                     frames.append(df)
-                    logger.info(f"  CALCE: loaded {battery_id} → {len(df)} rows")
+                    logger.info(f"  CALCE: loaded {battery_id} -> {len(df)} rows")
                 except Exception as exc:
                     logger.error(f"  CALCE: failed to load {file_path.name}: {exc}")
 
@@ -550,7 +550,7 @@ class FeatureEngine:
 
             # ── HI-5: Charge Time Delta ─────────────
             # Proxy: normalized cycle number change (monotonic trend)
-            g["charge_time_delta"] = g["cycle_number"].diff().fillna(1.0) / g["cycle_number"].max().clip(1)
+            g["charge_time_delta"] = g["cycle_number"].diff().fillna(1.0) / max(g["cycle_number"].max(), 1)
 
             hi_frames.append(g)
 

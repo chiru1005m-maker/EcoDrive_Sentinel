@@ -25,13 +25,14 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from src.agents.agentic_layer import ONNXInferenceEngine, run_diagnostic_pipeline
-from src.core.config import DiagnosticReport, InferenceResult, MaintenanceStatus, SensorReading, settings, PROJECT_ROOT
+from src.agents.agentic_layer import ONNXInferenceEngine, run_diagnostic_pipeline, run_diagnostic_sequence_pipeline
+from src.core.config import DiagnosticReport, InferenceResult, MaintenanceStatus, SensorReading, SensorSequence, settings, PROJECT_ROOT
 
 # ─────────────────────────────────────────────
 # Structural Logging Sink → logs/pipeline.log
@@ -92,6 +93,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error for request {request.url}: {exc.errors()}")
+    logger.error(f"Body: {exc.body}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
 
 
 # ─────────────────────────────────────────────
@@ -186,6 +196,20 @@ async def run_full_diagnostic(sensor: SensorReading):
         return report
     except Exception as exc:
         logger.error(f"Diagnostic pipeline failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v1/diagnose-sequence", response_model=DiagnosticReport, tags=["Agentic"])
+async def run_sequence_diagnostic(sequence: SensorSequence):
+    """
+    Full agentic diagnostic pipeline for a time-series sequence.
+    Expects exactly or up to 30 continuous readings.
+    """
+    try:
+        report = await run_diagnostic_sequence_pipeline(sequence.readings)
+        return report
+    except Exception as exc:
+        logger.error(f"Sequence diagnostic pipeline failed: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

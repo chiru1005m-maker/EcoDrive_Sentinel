@@ -51,6 +51,10 @@
                                         <option value="Na-ion">Na-ion</option>
                                     </select>
                                 </div>
+                                <div class="input-group">
+                                    <label>Nominal Capacity (Ah)</label>
+                                    <input type="number" id="nominal-capacity" step="0.1" placeholder="e.g. 50.0 (Optional)">
+                                </div>
                             </div>
                             <div class="input-row">
                                 <div class="input-group">
@@ -73,6 +77,18 @@
                                 </div>
                             </div>
                             <button type="submit" class="glow-btn">Execute Diagnostics</button>
+                        </form>
+                        
+                        <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 2rem 0;">
+                        
+                        <h2>Upload Sequence Log</h2>
+                        <p class="subtitle">Upload a 30-step CSV file to run precise temporal inference.</p>
+                        <form id="sequence-form" style="margin-top: 1rem;">
+                            <div class="input-group" style="margin-bottom: 1rem;">
+                                <label>Telemetry CSV (30 rows)</label>
+                                <input type="file" id="csv-file" accept=".csv" required style="width: 100%; background: rgba(0,0,0,0.3); color: #fff; padding: 0.5rem; border-radius: 8px;">
+                            </div>
+                            <button type="submit" class="glow-btn" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">Process Sequence</button>
                         </form>
                     </div>
 
@@ -99,6 +115,28 @@
                         <div id="results-placeholder" class="placeholder">
                             <p>Ready to process telemetry.</p>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- Telemetry Audit Log -->
+                <div class="glass-panel full-width" style="margin-top: 2rem;">
+                    <h2>Telemetry Audit Log</h2>
+                    <div style="overflow-x: auto; margin-top: 1rem;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; color: #f0f4f8;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                    <th style="padding: 10px;">Time</th>
+                                    <th style="padding: 10px;">Battery ID</th>
+                                    <th style="padding: 10px;">Chemistry</th>
+                                    <th style="padding: 10px;">Cycles</th>
+                                    <th style="padding: 10px;">RUL</th>
+                                    <th style="padding: 10px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-body">
+                                <!-- History rows injected here -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -136,6 +174,6 @@
         </main>
     </div>
 
-    <script src="/static/script.js?v=2"></script>
+    <script src="/static/script.js?v=4"></script>
 </body>
 </html>

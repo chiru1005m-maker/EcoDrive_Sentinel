@@ -1,0 +1,11 @@
+{
+    "aie_target": "RyzenAI",
+    "xclbin": "AMD_AIE2_NxM",
+    "compile_options": {
+        "target": "AMD_AIE2_NxM",
+        "ipu_performance_mode": "HighPerformance"
+    },
+    "runtime_options": {
+        "run_on_aie": true
+    }
+}

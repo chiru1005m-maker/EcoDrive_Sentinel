@@ -58,5 +58,5 @@ async def get_training_logs():
 
 if __name__ == "__main__":
     import uvicorn
-    # Run dashboard server on port 8080 to not conflict with the main API on 8000
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    # Run dashboard server on port 8081 to not conflict with the main API on 8000 or system services on 8080
+    uvicorn.run(app, host="0.0.0.0", port=8081)

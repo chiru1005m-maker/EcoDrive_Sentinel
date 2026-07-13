@@ -13,6 +13,8 @@ from src.agents.agentic_layer import ONNXInferenceEngine
 
 console = Console()
 
+from src.core.config import ONNX_DIR
+
 # We initialize the inference engine once for the test session
 engine = ONNXInferenceEngine()
 
@@ -88,24 +90,30 @@ def evaluate_chemistry(chemistry: str) -> dict:
         cycle = int(cycle)
         true_rul = get_true_rul(chemistry, cycle)
         
-        # Simulate realistic voltage degradation so the model can predict accurately
-        # If true_rul goes from 100 to 0, voltage roughly drops from 4.2 to 3.0
-        fraction = min(1.0, cycle / max_cycles)
-        voltage = 4.2 - (0.7 * fraction)
-
-        # Build mock payload for pipeline
-        sensor = SensorReading(
-            battery_id="TEST-001",
-            timestamp=time.time(),
-            voltage=voltage,
-            current=-2.0,
-            temperature=25.0,
-            cycle_count=cycle,
-            chemistry=chem_enum
-        )
-        
-        # Run live inference through our agentic engine
-        pred_rul, _ = engine.predict(sensor)
+        # Build a realistic 30-step historical sequence for the model
+        sequence = []
+        for step_cycle in range(max(0, cycle - 30), cycle):
+            step_fraction = min(1.0, step_cycle / max_cycles)
+            step_voltage = 4.2 - (0.7 * step_fraction)
+            sequence.append(SensorReading(
+                battery_id="TEST-001",
+                timestamp=time.time(),
+                voltage=step_voltage,
+                current=-2.0,
+                temperature=25.0,
+                cycle_count=step_cycle,
+                chemistry=chem_enum
+            ))
+            
+        if not sequence:
+            # Fallback for cycle 0
+            sequence = [SensorReading(
+                battery_id="TEST-001", timestamp=time.time(), voltage=4.2,
+                current=-2.0, temperature=25.0, cycle_count=0, chemistry=chem_enum
+            )]
+            
+        # Run live inference using the sequence prediction method
+        pred_rul, _ = engine.predict_sequence(sequence)
         
         y_true.append(true_rul)
         y_pred.append(pred_rul)

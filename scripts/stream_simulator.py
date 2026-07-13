@@ -62,7 +62,7 @@ async def stream_telemetry():
             
             # Transmit to the FastAPI endpoint with error handling
             try:
-                response = await client.post(API_ENDPOINT, json=payload, timeout=2.0)
+                response = await client.post(API_ENDPOINT, json=payload, timeout=20.0)
                 
                 # Check if it was successful
                 if response.status_code == 200:

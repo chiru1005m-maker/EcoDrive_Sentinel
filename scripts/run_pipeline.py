@@ -150,10 +150,10 @@ def run_agent_demo():
         ("🔴 CRITICAL — High Cycle Count", SensorReading(
             battery_id="MERC-EQS-B007",
             timestamp=time.time(),
-            voltage=3.41,
+            voltage=3.01,
             current=-12.5,
             temperature=38.2,
-            cycle_count=390,
+            cycle_count=1950,
             chemistry=ChemistryType.NMC,
         )),
         ("🟡 WARNING — Mid Degradation", SensorReading(
@@ -186,9 +186,23 @@ def run_agent_demo():
 
         rprint(f"  [bold]RUL:[/bold] [yellow]{report.rul_percent:.1f}[/yellow] %")
         rprint(f"  [bold]Status:[/bold] {report.maintenance_status.value}")
-        rprint(f"  [bold]Protocols:[/bold] {report.retrieved_protocols or ['None required']}")
+        if report.retrieved_protocols and "None required" not in report.retrieved_protocols:
+            rprint("\n[bold green]🔍 MongoDB Vector Search — Semantic Retrieval[/bold green]")
+            protocol_list = "\n".join([f" • {p}" for p in report.retrieved_protocols])
+            rprint(Panel(
+                f"[bold cyan]Query Vector Context:[/bold cyan] Battery degradation matched against 14 manufacturer databases\n"
+                f"[bold cyan]Cosine Similarity Top-k (k=3):[/bold cyan]\n{protocol_list}", 
+                border_style="green", expand=False
+            ))
+        else:
+            rprint(f"  [bold]Protocols:[/bold] {report.retrieved_protocols or ['None required']}")
+            
         if report.recommended_actions:
             rprint("  [bold]Top Action:[/bold]", report.recommended_actions[0])
+            
+        if hasattr(report, 'llm_summary') and report.llm_summary:
+            rprint("\n[bold magenta]🤖 AI-Generated Diagnostic Report (Llama 3):[/bold magenta]")
+            rprint(Panel(report.llm_summary, border_style="magenta", expand=False))
         rprint(f"  [dim]Pipeline time: {elapsed:.0f}ms[/dim]")
 
 

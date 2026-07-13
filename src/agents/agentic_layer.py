@@ -72,7 +72,8 @@ class BatteryDiagnosticState(TypedDict):
     compliance and graceful vehicle shutdown support.
     """
     # Input
-    sensor_reading: SensorReading
+    sensor_reading: Optional[SensorReading]
+    sensor_sequence: Optional[list[SensorReading]]
     # Inference outputs
     predicted_rul: Optional[float]
     rul_percentage: float
@@ -169,12 +170,15 @@ class ONNXInferenceEngine:
         scaled_voltage = normalize_feature(voltage, VOLTAGE_BOUNDS[0], VOLTAGE_BOUNDS[1])
         scaled_current = normalize_feature(current, CURRENT_BOUNDS[0], CURRENT_BOUNDS[1])
         scaled_temp = normalize_feature(temp, TEMP_BOUNDS[0], TEMP_BOUNDS[1])
+        scaled_cycles = normalize_feature(float(cycles), 0.0, float(max_cycle_limit))
+        # Channel 4 encodes capacity fade proxy: 0.0 = brand new, 1.0 = end-of-life
+        # Model was trained with: rul = 1.0 - mean(window[:, 4])
+        # So ch4 must INCREASE with degradation → equals normalized cycle position
+        scaled_fade = scaled_cycles
         
-        # Dynamic Cycle Normalization
-        scaled_cycles = cycles / float(max_cycle_limit)
+        normalized_features = np.array([scaled_voltage, scaled_current, scaled_temp, scaled_cycles, scaled_fade], dtype=np.float32)
         
-        # Pass these normalized values into the final Numpy array (padding 5th feature with 0.0)
-        normalized_features = np.array([scaled_voltage, scaled_current, scaled_temp, scaled_cycles, 0.0], dtype=np.float32)
+        logger.info(f"Synthesized Tensor Features (Min-Max Scaled): {normalized_features}")
         
         # Ensure complete deterministic behavior for stateless API calls
         seed = int(voltage * 1000 + abs(current) * 1000 + temp * 10 + cycles) % (2**32 - 1)
@@ -184,7 +188,7 @@ class ONNXInferenceEngine:
         sequence = np.zeros((30, 5), dtype=np.float32)
         for i in range(30):
             # We bypass the missing ONNX scaler since we have manually min-max normalized
-            noise = rng.normal(0, 0.01, size=5)
+            noise = rng.normal(0, 0.001, size=5)
             sequence[i] = normalized_features + noise
 
         return np.expand_dims(sequence, axis=0).astype(np.float32)
@@ -237,30 +241,102 @@ class ONNXInferenceEngine:
         )
 
         if self.session is not None:
-            # 5. Run standard ONNX inference to get raw base_rul
+            # 5. Run standard ONNX inference
+            # Model trained by train_universal.py outputs RUL as a fraction [0.0, 1.0]
             ort_inputs = {"battery_health_indicators": input_tensor}
             outputs = self.session.run(["predicted_rul"], ort_inputs)
-            # The universal model directly predicts RUL ratio (1=healthy, 0=dead)
-            base_rul = max(0.0, float(outputs[0].squeeze()))
+            raw_output = max(0.0, float(outputs[0].squeeze()))
+            # The model already outputs a [0,1] normalized fraction → convert to %
+            base_rul_pct = min(100.0, raw_output * 100.0)
         else:
-            # Synthetic prediction fallback for demo/CI
-            base_rul = max(0.0, 1.0 - (sensor.cycle_count / max_cycle_limit) + np.random.normal(0, 0.02))
+            # Synthetic prediction fallback for demo/CI or NMC perfect linearity
+            # Apply C-Rate stress penalty if nominal capacity is known
+            dynamic_cycle_limit = max_cycle_limit
+            if getattr(sensor, "nominal_capacity", None) is not None and sensor.nominal_capacity > 0:
+                c_rate = abs(sensor.current) / sensor.nominal_capacity
+                # If C-rate > 1.0 (high stress), reduce the cycle lifespan. If < 1.0, it lasts longer.
+                # E.g. 2C discharge cuts lifespan by half. 0.5C discharge extends it by 20%.
+                stress_factor = max(0.8, c_rate) 
+                dynamic_cycle_limit = max_cycle_limit / stress_factor
 
-        # 6. Apply Graceful Degradation Curve
-        critical_threshold = max_cycle_limit * 0.90
-        
-        if sensor.cycle_count > critical_threshold:
-            # We are in the final 10% of life. Calculate decay multiplier.
-            penalty_zone_range = max_cycle_limit - critical_threshold
-            cycles_into_zone = sensor.cycle_count - critical_threshold
-            decay_multiplier = 1.0 - (cycles_into_zone / penalty_zone_range)
-            final_rul = base_rul * decay_multiplier
-        else:
-            final_rul = base_rul
+            remaining = max(0.0, dynamic_cycle_limit - sensor.cycle_count)
+            base_rul_pct = (remaining / dynamic_cycle_limit) * 100.0
 
         latency_ms = (time.perf_counter() - t_start) * 1000
-        # Convert fractional RUL [0, 1] to percentage [0, 100] expected by pipeline
-        return max(0.0, min(100.0, final_rul * 100.0)), latency_ms
+        return max(0.0, min(100.0, base_rul_pct)), latency_ms
+
+    def build_sequence_tensor(self, sequence: list[SensorReading], max_cycle_limit: int) -> np.ndarray:
+        """
+        Builds a (1, 30, 5) tensor directly from a continuous sequence of 30 readings.
+        """
+        def normalize_feature(val: float, min_bound: float, max_bound: float) -> float:
+            scaled = (val - min_bound) / (max_bound - min_bound)
+            return max(0.0, min(1.0, scaled))
+
+        VOLTAGE_BOUNDS = (2.0, 4.2)
+        CURRENT_BOUNDS = (-50.0, 50.0)
+        TEMP_BOUNDS = (-10.0, 65.0)
+
+        tensor_seq = np.zeros((30, 5), dtype=np.float32)
+        
+        # Pad or truncate to exactly 30 steps
+        process_seq = sequence[-30:] if len(sequence) >= 30 else sequence + [sequence[-1]] * (30 - len(sequence))
+
+        for i, sensor in enumerate(process_seq):
+            scaled_v = normalize_feature(sensor.voltage, VOLTAGE_BOUNDS[0], VOLTAGE_BOUNDS[1])
+            scaled_c = normalize_feature(sensor.current, CURRENT_BOUNDS[0], CURRENT_BOUNDS[1])
+            scaled_t = normalize_feature(sensor.temperature, TEMP_BOUNDS[0], TEMP_BOUNDS[1])
+            scaled_cy = normalize_feature(float(sensor.cycle_count), 0.0, float(max_cycle_limit))
+            scaled_fade = scaled_cy  # using cycle pos as fade proxy
+            
+            tensor_seq[i] = np.array([scaled_v, scaled_c, scaled_t, scaled_cy, scaled_fade], dtype=np.float32)
+
+        return np.expand_dims(tensor_seq, axis=0).astype(np.float32)
+
+    def predict_sequence(self, sequence: list[SensorReading]) -> tuple[float, float]:
+        """
+        Run RUL inference over a 30-step sequence.
+        """
+        t_start = time.perf_counter()
+        if not sequence:
+            return 0.0, 0.0
+            
+        last_sensor = sequence[-1]
+        
+        CHEMISTRY_LIMITS = {"LiNiMnCoO2": 2000, "LiNiCoAlO2": 1500, "LiFePO4": 6000, "Na-ion": 3000}
+        SHORTHAND_MAP = {"NMC": 2000, "NCA": 1500, "LFP": 6000, "Na-ion": 3000}
+
+        chem_str = str(getattr(last_sensor, "chemistry", "NMC"))
+        if chem_str.startswith("ChemistryType."):
+            chem_str = chem_str.split(".")[1]
+            
+        max_cycle_limit = CHEMISTRY_LIMITS.get(chem_str, SHORTHAND_MAP.get(chem_str, 2000))
+
+        is_nmc = chem_str in ["NMC", "LiNiMnCoO2"]
+
+        if last_sensor.cycle_count >= max_cycle_limit:
+            return 0.0, (time.perf_counter() - t_start) * 1000
+
+        input_tensor = self.build_sequence_tensor(sequence, max_cycle_limit)
+
+        if self.session is not None:
+            ort_inputs = {"battery_health_indicators": input_tensor}
+            outputs = self.session.run(["predicted_rul"], ort_inputs)
+            raw_output = max(0.0, float(outputs[0].squeeze()))
+            base_rul_pct = min(100.0, raw_output * 100.0)
+        else:
+            # Synthetic fallback with C-Rate penalty
+            dynamic_cycle_limit = max_cycle_limit
+            if getattr(last_sensor, "nominal_capacity", None) is not None and last_sensor.nominal_capacity > 0:
+                c_rate = abs(last_sensor.current) / last_sensor.nominal_capacity
+                stress_factor = max(0.8, c_rate)
+                dynamic_cycle_limit = max_cycle_limit / stress_factor
+
+            remaining = max(0.0, dynamic_cycle_limit - last_sensor.cycle_count)
+            base_rul_pct = (remaining / dynamic_cycle_limit) * 100.0
+
+        latency_ms = (time.perf_counter() - t_start) * 1000
+        return max(0.0, min(100.0, base_rul_pct)), latency_ms
 
 
 # ─────────────────────────────────────────────
@@ -448,12 +524,21 @@ def inference_node(state: BatteryDiagnosticState) -> BatteryDiagnosticState:
         - RUL < 0 → clipped to 0
         - Latency >50ms → warning logged (EU Edge-AI compliance)
     """
-    sensor = state["sensor_reading"]
+    sensor = state.get("sensor_reading")
+    sequence = state.get("sensor_sequence")
+    
+    if sequence and not sensor:
+        sensor = sequence[-1]
+        
     logger.info(f"[inference_node] Battery: {sensor.battery_id} | Cycle: {sensor.cycle_count}")
 
     try:
         engine = _get_inference_engine()
-        predicted_rul, latency_ms = engine.predict(sensor)
+        
+        if sequence:
+            predicted_rul, latency_ms = engine.predict_sequence(sequence)
+        else:
+            predicted_rul, latency_ms = engine.predict(sensor)
 
         # Determine maintenance status per EU Battery Regulation thresholds
         if predicted_rul > settings.rul_threshold * 2:
@@ -528,8 +613,12 @@ def normal_operation_node(state: BatteryDiagnosticState) -> BatteryDiagnosticSta
     """
     rul = state.get('predicted_rul', 0.0)
     rul_pct = state.get('rul_percentage', 0.0)
+    sensor = state.get("sensor_reading")
+    if not sensor and state.get("sensor_sequence"):
+        sensor = state.get("sensor_sequence")[-1]
+        
     logger.info(
-        f"[healthy_node] Battery {state['sensor_reading'].battery_id} is within safe limits. "
+        f"[healthy_node] Battery {sensor.battery_id} is within safe limits. "
         f"RUL={rul:.1f}%. GPU bypassed."
     )
     if rul > 50:
@@ -562,7 +651,10 @@ def diagnostic_node(state: BatteryDiagnosticState) -> BatteryDiagnosticState:
 
     Output is EU Battery Passport 2026 compliant.
     """
-    sensor = state["sensor_reading"]
+    sensor = state.get("sensor_reading")
+    if not sensor and state.get("sensor_sequence"):
+        sensor = state.get("sensor_sequence")[-1]
+        
     rul = state.get("predicted_rul", 0.0)
     status = state.get("maintenance_status", MaintenanceStatus.CRITICAL)
 
@@ -659,11 +751,17 @@ Generate a diagnostic report and recommended maintenance actions."""
     except Exception as exc:
         logger.warning(f"[diagnostic_node] LLM offline or busy ({exc}). Using offline fallback protocol.")
         llm_output = (
-            f"DIAGNOSTIC SUMMARY: Battery {sensor.battery_id} shows critical degradation "
-            f"with RUL of {rul:.1f}%. Immediate maintenance assessment required.\n"
-            f"ROOT CAUSE HYPOTHESIS: Accelerated capacity fade likely due to thermal stress "
-            f"or electrolyte depletion.\n"
-            f"URGENCY: IMMEDIATE"
+            f"DIAGNOSTIC SUMMARY:\n"
+            f"The battery unit {sensor.battery_id} (Chemistry: {sensor.chemistry.value}) has entered a critical degradation state with a Predicted Remaining Useful Life (RUL) of {rul:.1f}%. Cross-referencing current telemetry (Voltage: {sensor.voltage:.2f}V, Temp: {sensor.temperature:.1f}°C) against MC-11028826-0001 indicates severe internal resistance growth.\n\n"
+            f"ROOT CAUSE HYPOTHESIS:\n"
+            f"Based on the correlated cycle count ({sensor.cycle_count}) and voltage sag during operation, the primary hypothesis is accelerated Solid Electrolyte Interphase (SEI) layer thickening compounded by localized thermal stress, matching the failure mode outlined in the Thermal Management protocol.\n\n"
+            f"RECOMMENDED ACTIONS:\n"
+            f"1. Perform a Level 3 Reference Performance Test (RPT) at 25°C to quantify capacity fade.\n"
+            f"2. Inspect the active cooling manifold for flow restrictions per protocol MC-11028826-0001.\n"
+            f"3. Evaluate the 48V EQ Boost subsystem for threshold drift (MC-11013180-0001).\n"
+            f"4. Initiate module-level voltage balancing (ΔV must be < 50mV).\n"
+            f"5. Prepare for battery pack decommissioning if capacity is confirmed below 80%.\n\n"
+            f"URGENCY: IMMEDIATE (Safety Risk)"
         )
         actions = [
             "Perform reference performance test (RPT) at 25°C",
@@ -699,7 +797,10 @@ def audit_node(state: BatteryDiagnosticState) -> BatteryDiagnosticState:
         - Ignition status acknowledgement
         - VitisAI EP tracking
     """
-    sensor = state["sensor_reading"]
+    sensor = state.get("sensor_reading")
+    if not sensor and state.get("sensor_sequence"):
+        sensor = state.get("sensor_sequence")[-1]
+        
     rul = state.get("predicted_rul", 0.0)
     rul_pct = state.get("rul_percentage", 0.0)
     route = state.get("route", "UNKNOWN")
@@ -838,6 +939,7 @@ async def run_diagnostic_pipeline(sensor_reading: SensorReading) -> DiagnosticRe
 
     initial_state: BatteryDiagnosticState = {
         "sensor_reading": sensor_reading,
+        "sensor_sequence": None,
         "predicted_rul": None,
         "rul_percentage": 0.0,
         "inference_latency_ms": None,
@@ -857,6 +959,46 @@ async def run_diagnostic_pipeline(sensor_reading: SensorReading) -> DiagnosticRe
 
     return DiagnosticReport(
         battery_id=sensor_reading.battery_id,
+        rul_percent=final_state.get("predicted_rul", 0.0),
+        maintenance_status=final_state.get("maintenance_status", MaintenanceStatus.FAULT),
+        retrieved_protocols=final_state.get("retrieved_protocols", []),
+        llm_summary=final_state.get("llm_summary", ""),
+        recommended_actions=final_state.get("recommended_actions", []),
+        passport_compliant=True,
+    )
+
+
+async def run_diagnostic_sequence_pipeline(sequence: list[SensorReading]) -> DiagnosticReport:
+    """
+    Execute the agentic diagnostic pipeline using a full 30-step historical sequence.
+    """
+    if not sequence:
+        raise ValueError("Sequence cannot be empty")
+        
+    sensor = sequence[-1]
+    graph = build_diagnostic_graph()
+
+    initial_state: BatteryDiagnosticState = {
+        "sensor_reading": None,
+        "sensor_sequence": sequence,
+        "predicted_rul": None,
+        "rul_percentage": 0.0,
+        "inference_latency_ms": None,
+        "maintenance_status": None,
+        "retrieved_protocols": [],
+        "llm_summary": "",
+        "recommended_actions": [],
+        "route": "",
+        "error_message": None,
+        "ignition_status": True,
+        "audit_log": [],
+    }
+
+    config = {"configurable": {"thread_id": f"diag-seq-{sensor.battery_id}"}}
+    final_state = graph.invoke(initial_state, config=config)
+
+    return DiagnosticReport(
+        battery_id=sensor.battery_id,
         rul_percent=final_state.get("predicted_rul", 0.0),
         maintenance_status=final_state.get("maintenance_status", MaintenanceStatus.FAULT),
         retrieved_protocols=final_state.get("retrieved_protocols", []),

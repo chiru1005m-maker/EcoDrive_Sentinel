@@ -121,6 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
             cycle_count: parseInt(document.getElementById('cycle').value),
             chemistry: document.getElementById('chemistry').value
         };
+        const nomCapValue = document.getElementById('nominal-capacity').value;
+        if (nomCapValue && nomCapValue.trim() !== '') {
+            payload.nominal_capacity = parseFloat(nomCapValue);
+        }
 
         try {
             // Note: In production, this would call the actual API on port 8000
@@ -149,6 +153,32 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('loading-spinner').classList.add('hidden');
             document.getElementById('results-display').classList.remove('hidden');
 
+            // Add to History Table
+            const historyBody = document.getElementById('history-body');
+            const newRow = document.createElement('tr');
+            newRow.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+            
+            const timeStr = new Date().toLocaleTimeString();
+            
+            // Format status with color
+            let statusColor = '#4ade80'; // normal (green)
+            if (data.maintenance_status.includes('WARNING')) statusColor = '#fbbf24'; // yellow
+            if (data.maintenance_status.includes('MAINTENANCE_REQUIRED') || data.maintenance_status.includes('CRITICAL')) {
+                statusColor = '#ef4444'; // red
+            }
+            
+            newRow.innerHTML = `
+                <td style="padding: 10px; color: #94a3b8;">${timeStr}</td>
+                <td style="padding: 10px; font-weight: 600;">${payload.battery_id}</td>
+                <td style="padding: 10px; color: #94a3b8;">${payload.chemistry}</td>
+                <td style="padding: 10px;">${payload.cycle_count}</td>
+                <td style="padding: 10px; font-weight: 600; color: #38bdf8;">${data.rul_percent.toFixed(1)}%</td>
+                <td style="padding: 10px; font-weight: 600; color: ${statusColor};">${data.maintenance_status}</td>
+            `;
+            
+            // Prepend so newest is at the top
+            historyBody.insertBefore(newRow, historyBody.firstChild);
+
         } catch (e) {
             console.error(e);
             alert('Error calling inference API. Make sure the API server is running on port 8000.');
@@ -157,5 +187,118 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Sequence CSV Upload Form ---
+    const seqForm = document.getElementById('sequence-form');
+    seqForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const fileInput = document.getElementById('csv-file');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        document.getElementById('results-placeholder').classList.add('hidden');
+        document.getElementById('results-display').classList.add('hidden');
+        document.getElementById('loading-spinner').classList.remove('hidden');
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const csv = event.target.result;
+            const lines = csv.split('\n').filter(line => line.trim().length > 0);
+            
+            // Assume format: Voltage, Current, Temperature, CycleCount
+            // We will skip the header if the first line doesn't start with a number
+            let startIndex = 0;
+            if (lines.length > 0 && isNaN(parseFloat(lines[0].split(',')[0]))) {
+                startIndex = 1;
+            }
+
+            const readings = [];
+            const batteryId = document.getElementById('batt-id').value;
+            const chemistry = document.getElementById('chemistry').value;
+            const now = Date.now() / 1000;
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const parts = lines[i].split(',');
+                if (parts.length >= 4) {
+                    readings.push({
+                        battery_id: batteryId,
+                        timestamp: now + i,
+                        voltage: parseFloat(parts[0]),
+                        current: parseFloat(parts[1]),
+                        temperature: parseFloat(parts[2]),
+                        cycle_count: parseInt(parts[3]),
+                        chemistry: chemistry
+                    });
+                }
+            }
+
+            if (readings.length === 0) {
+                alert("Failed to parse CSV or empty file.");
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('results-placeholder').classList.remove('hidden');
+                return;
+            }
+
+            const payload = { readings: readings };
+
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/diagnose-sequence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) throw new Error('API Error');
+                
+                const data = await response.json();
+                
+                document.getElementById('res-rul').innerText = data.rul_percent.toFixed(1) + '%';
+                
+                const statusEl = document.getElementById('res-status');
+                statusEl.innerText = data.maintenance_status;
+                statusEl.className = 'status-badge';
+                if (data.maintenance_status.includes('NORMAL')) statusEl.classList.add('normal');
+                else if (data.maintenance_status.includes('WARNING')) statusEl.classList.add('warning');
+                else statusEl.classList.add('critical');
+                
+                document.getElementById('res-llm').innerText = data.llm_summary || "No Agentic summary provided.";
+
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('results-display').classList.remove('hidden');
+
+                // Add to History Table
+                const historyBody = document.getElementById('history-body');
+                const newRow = document.createElement('tr');
+                newRow.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+                
+                const timeStr = new Date().toLocaleTimeString();
+                
+                let statusColor = '#4ade80';
+                if (data.maintenance_status.includes('WARNING')) statusColor = '#fbbf24';
+                if (data.maintenance_status.includes('MAINTENANCE_REQUIRED') || data.maintenance_status.includes('CRITICAL')) {
+                    statusColor = '#ef4444';
+                }
+                
+                newRow.innerHTML = `
+                    <td style="padding: 10px; color: #94a3b8;">${timeStr} (CSV)</td>
+                    <td style="padding: 10px; font-weight: 600;">${batteryId}</td>
+                    <td style="padding: 10px; color: #94a3b8;">${chemistry}</td>
+                    <td style="padding: 10px;">${readings[readings.length - 1].cycle_count}</td>
+                    <td style="padding: 10px; font-weight: 600; color: #38bdf8;">${data.rul_percent.toFixed(1)}%</td>
+                    <td style="padding: 10px; font-weight: 600; color: ${statusColor};">${data.maintenance_status}</td>
+                `;
+                
+                historyBody.insertBefore(newRow, historyBody.firstChild);
+
+            } catch (e) {
+                console.error(e);
+                alert('Error calling inference API for sequence data.');
+                document.getElementById('loading-spinner').classList.add('hidden');
+                document.getElementById('results-placeholder').classList.remove('hidden');
+            }
+        };
+
+        reader.readAsText(file);
+    });
 
 });

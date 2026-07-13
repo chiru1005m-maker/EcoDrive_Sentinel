@@ -185,6 +185,14 @@ class SensorReading(BaseModel):
     temperature: float = Field(..., ge=-20.0, le=80.0)
     cycle_count: int = Field(..., ge=0, le=10000)
     chemistry: ChemistryType = Field(default=ChemistryType.NMC)
+    nominal_capacity: float = Field(default=50.0, description="Nominal capacity [Ah]")
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_missing_capacity(cls, data: dict) -> dict:
+        if data.get("nominal_capacity") is None:
+            data["nominal_capacity"] = 50.0
+        return data
 
     @model_validator(mode="after")
     def check_discharge_current(self) -> "SensorReading":
@@ -192,6 +200,21 @@ class SensorReading(BaseModel):
         if self.current < -200.0:
             raise ValueError(f"Discharge current {self.current}A exceeds safe threshold")
         return self
+
+
+class SensorSequence(BaseModel):
+    """
+    A full time-series sequence containing up to 30 continuous SensorReadings.
+    """
+    readings: list[SensorReading] = Field(..., description="Array of sequential sensor readings")
+
+    @field_validator("readings")
+    @classmethod
+    def validate_length(cls, v: list[SensorReading]) -> list[SensorReading]:
+        if not v:
+            raise ValueError("Sequence cannot be empty")
+        return v
+
 
 
 class InferenceResult(BaseModel):
