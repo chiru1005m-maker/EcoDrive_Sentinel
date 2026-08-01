@@ -752,13 +752,13 @@ Generate a diagnostic report and recommended maintenance actions."""
         logger.warning(f"[diagnostic_node] LLM offline or busy ({exc}). Using offline fallback protocol.")
         llm_output = (
             f"DIAGNOSTIC SUMMARY:\n"
-            f"The battery unit {sensor.battery_id} (Chemistry: {sensor.chemistry.value}) has entered a critical degradation state with a Predicted Remaining Useful Life (RUL) of {rul:.1f}%. Cross-referencing current telemetry (Voltage: {sensor.voltage:.2f}V, Temp: {sensor.temperature:.1f}°C) against MC-11028826-0001 indicates severe internal resistance growth.\n\n"
+            f"The battery unit {sensor.battery_id} (Chemistry: {sensor.chemistry.value}) has entered a critical degradation state with a Predicted Remaining Useful Life (RUL) of {rul:.1f}%. Cross-referencing current telemetry (Voltage: {sensor.voltage:.2f}V, Temp: {sensor.temperature:.1f}°C) against SYN-BULLETIN-0011-0001 indicates severe internal resistance growth.\n\n"
             f"ROOT CAUSE HYPOTHESIS:\n"
             f"Based on the correlated cycle count ({sensor.cycle_count}) and voltage sag during operation, the primary hypothesis is accelerated Solid Electrolyte Interphase (SEI) layer thickening compounded by localized thermal stress, matching the failure mode outlined in the Thermal Management protocol.\n\n"
             f"RECOMMENDED ACTIONS:\n"
             f"1. Perform a Level 3 Reference Performance Test (RPT) at 25°C to quantify capacity fade.\n"
-            f"2. Inspect the active cooling manifold for flow restrictions per protocol MC-11028826-0001.\n"
-            f"3. Evaluate the 48V EQ Boost subsystem for threshold drift (MC-11013180-0001).\n"
+            f"2. Inspect the active cooling manifold for flow restrictions per protocol SYN-BULLETIN-0011-0001.\n"
+            f"3. Evaluate the auxiliary (48V) battery subsystem for threshold drift (SYN-BULLETIN-0004-0001).\n"
             f"4. Initiate module-level voltage balancing (ΔV must be < 50mV).\n"
             f"5. Prepare for battery pack decommissioning if capacity is confirmed below 80%.\n\n"
             f"URGENCY: IMMEDIATE (Safety Risk)"
@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
 
     # Scenario 1: Critical battery (low RUL trigger)
     critical_sensor = SensorReading(
-        battery_id="MERC-EQS-B007",
+        battery_id="DEMO-EV-B007",
         timestamp=time.time(),
         voltage=3.41,       # degraded voltage
         current=-12.5,
@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
 
     # Scenario 2: Healthy battery
     healthy_sensor = SensorReading(
-        battery_id="MERC-EQS-B001",
+        battery_id="DEMO-EV-B001",
         timestamp=time.time(),
         voltage=3.71,
         current=-8.0,
