@@ -148,7 +148,7 @@ def run_agent_demo():
 
     scenarios = [
         ("🔴 CRITICAL — High Cycle Count", SensorReading(
-            battery_id="MERC-EQS-B007",
+            battery_id="DEMO-EV-B007",
             timestamp=time.time(),
             voltage=3.01,
             current=-12.5,
@@ -157,7 +157,7 @@ def run_agent_demo():
             chemistry=ChemistryType.NMC,
         )),
         ("🟡 WARNING — Mid Degradation", SensorReading(
-            battery_id="MERC-EQS-B012",
+            battery_id="DEMO-EV-B012",
             timestamp=time.time(),
             voltage=3.58,
             current=-9.0,
@@ -166,7 +166,7 @@ def run_agent_demo():
             chemistry=ChemistryType.NMC,
         )),
         ("🟢 NORMAL — Healthy Battery", SensorReading(
-            battery_id="MERC-EQS-B001",
+            battery_id="DEMO-EV-B001",
             timestamp=time.time(),
             voltage=3.72,
             current=-8.0,
