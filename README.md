@@ -653,58 +653,58 @@ Automated evaluation of the RAG diagnostic pipeline (via RAGAS + human expert re
 
 ### Phase 3.2 — The 'Sentinel' Knowledge Base (14 Technical Bulletins)
 
-The 14 **Gold Standard** manufacturer technical bulletins (`MC-1100xxxx-0001.pdf`) form the core knowledge base from which the RAG system derives its diagnostic logic. Each bulletin encodes specific engineering rules that have been distilled into the system's reasoning chain:
+> **Architectural Framing Note:** *All diagnostic trouble codes (DTCs), bulletin identifiers, and OEM-style documentation referenced in this section are entirely synthetic — authored by me to model the structure and reasoning patterns of real-world automotive fault-code documentation. They do not represent actual proprietary Mercedes-Benz or any other manufacturer's internal data. This knowledge base exists solely to demonstrate the RAG retrieval and diagnostic reasoning architecture.*
 
-#### 1. Safety & Isolation: HV PTC Heater Fault Detection
+The 14 synthetic technical bulletins (`SYN-BULLETIN-0001` through `SYN-BULLETIN-0014`) form the knowledge base the RAG system retrieves from. Each bulletin was written to mirror the structure of real OEM fault documentation — DTC-style codes, component references, and repair logic — so the retrieval and reasoning pipeline can be demonstrated end-to-end on realistic (not real) data.
 
-**Bulletin(s):** `MC-11028815`, `MC-11029977`
+#### 1. Safety & Isolation: HV PTC Heater Fault Detection (Synthetic Example)
 
-Specialized detection logic for **'slow-acting' insulation faults** in the HV PTC (Positive Temperature Coefficient) heater module (**N33/14**). These faults are caused by **moisture intrusion** into the heater's ceramic element housing, which gradually degrades the insulation resistance over weeks or months — below the BMS's standard isolation monitoring threshold. The system implements a **rolling 30-cycle insulation resistance trend** that flags degradation patterns invisible to single-point measurements.
+**Bulletin(s):** `SYN-BULLETIN-0001`, `SYN-BULLETIN-0002`
 
-#### 2. State of Health (SoH) Accuracy: 48V Battery Aging Thresholds
+Illustrative detection logic for a 'slow-acting' insulation fault pattern in a high-voltage PTC heater module, modeled on how such faults are typically documented in EV service literature. Demonstrates a rolling 30-cycle insulation resistance trend to flag degradation invisible to single-point measurements — the underlying engineering concept (trend-based detection over point-in-time thresholds) is real; the specific bulletin content is synthetic.
 
-**Bulletin(s):** `MC-11012788`, `MC-11013180`
+#### 2. State of Health (SoH) Accuracy: Auxiliary Battery Aging Thresholds (Synthetic Example)
 
-Identifies **aging threshold miscalculations** in the 48V auxiliary battery subsystem (EQ Boost). The factory SoH algorithm uses a fixed capacity reference that does not account for **temperature-dependent aging acceleration** (Arrhenius relationship). This causes the BMS to trigger **false SoH warnings** ("Battery Malfunction") in hot climates when the actual remaining capacity is still above 80%. The Sentinel knowledge base corrects the SoH calculation by applying a **temperature-compensated aging curve** derived from the bulletin's calibration data.
+**Bulletin(s):** `SYN-BULLETIN-0003`, `SYN-BULLETIN-0004`
 
-#### 3. Cross-System Diagnostics: DC/DC → BMS Fault Cascades
+Models a common real-world failure mode: fixed-reference SoH algorithms that don't account for temperature-dependent aging acceleration (Arrhenius relationship), causing false "battery malfunction" warnings in hot climates. The Sentinel system applies a temperature-compensated aging curve to correct for this — again, the engineering pattern is grounded in real BMS behavior; the specific bulletin numbers and thresholds are synthetic.
 
-**Bulletin(s):** `MC-11026594`, `MC-11027675`, `MC-11027756`
+#### 3. Cross-System Diagnostics: DC/DC → BMS Fault Cascades (Synthetic Example)
 
-Maps how **DC/DC converter (N83/1) wake-up failures** trigger secondary faults in the **Battery Management System (N82/9)**. When the DC/DC converter fails to enter its operational mode within 500ms of ignition-on, the BMS detects an under-voltage on its auxiliary supply rail and blows its internal electronic fuse — generating **DTC P0E2F00** ("Battery Management System — Internal Electronic Fuse Malfunction"). The Sentinel system's diagnostic_node uses this cross-system mapping to correctly attribute P0E2F00 to the DC/DC converter rather than the BMS itself, preventing unnecessary BMS replacement.
+**Bulletin(s):** `SYN-BULLETIN-0005`, `SYN-BULLETIN-0006`, `SYN-BULLETIN-0007`
+
+Demonstrates how a DC/DC converter wake-up failure can cascade into a secondary BMS fault — modeled as `SYN-DTC-P0E2F00` (a synthetic code, not a real DTC assignment). The `diagnostic_node` uses this cross-system mapping pattern to correctly attribute the root cause to the DC/DC converter rather than the BMS itself, illustrating the value of multi-hop fault reasoning rather than single-component diagnosis.
 
 #### 4. Mathematical Ground Truth: Range Estimation Formulas
 
-**Bulletin(s):** `MC-11006686`, `MC-11008062`, `MC-11017079`, `MC-11030070`
+**Bulletin(s):** `SYN-BULLETIN-0008` through `SYN-BULLETIN-0011`
 
-Implementation of **manufacturer-grade range estimation formulas** that compute three distinct range values based on real-time operating conditions:
+Range estimation logic based on published, general EV range-modeling principles (not manufacturer-proprietary formulas): three distinct range values computed from real-time operating conditions.
 
 | Range Type | Formula Basis | Key Inputs |
 |---|---|---|
-| **Minimum Range** | Worst-case energy budget | Max AC load (defrost + heated seats), aggressive driving profile (high acceleration frequency), uphill gradient |
-| **Potential Range** | Optimal driving behaviour | Current AC load, eco-mode driving profile, flat terrain assumption |
-| **Individual Range** | Personalized prediction | Rolling 50 km driving behaviour average, real-time AC consumption, learned route topology |
+| Minimum Range | Worst-case energy budget | Max AC load, aggressive driving profile, uphill gradient |
+| Potential Range | Optimal driving behaviour | Current AC load, eco-mode profile, flat terrain assumption |
+| Individual Range | Personalized prediction | Rolling 50 km driving average, real-time AC consumption, learned route topology |
 
-The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM's SoC/RUL output and applies these formulas to produce range estimates that match the instrument cluster display to within **±3%** of the manufacturer's own HPC-computed values.
-
-#### Complete Bulletin Registry
+#### Complete Bulletin Registry (Synthetic)
 
 | Bulletin ID | Component | Primary Logic |
 |---|---|---|
-| `MC-11006686` | Range Display | Minimum range estimation under load |
-| `MC-11008062` | HV Battery / BMS | Comprehensive diagnostic tree |
-| `MC-11012788` | 48V EQ Boost | SoH threshold correction |
-| `MC-11013180` | 48V EQ Boost | False warning elimination |
-| `MC-11017079` | Range Estimation | AC load impact coefficients |
-| `MC-11026594` | DC/DC Converter (N83/1) | Wake-up failure detection |
-| `MC-11027675` | DC/DC → BMS Cascade | P0E2F00 root cause mapping |
-| `MC-11027756` | BMS Fuse Logic (N82/9) | Electronic fuse malfunction tree |
-| `MC-11028806` | HV Charging | AC/DC charge fault isolation |
-| `MC-11028815` | HV PTC Heater (N33/14) | Slow insulation fault detection |
-| `MC-11028826` | Thermal Management | Coolant loop diagnostic |
-| `MC-11029061` | Thermal Management | Refrigerant circuit faults |
-| `MC-11029977` | HV PTC Heater (N33/14) | Moisture intrusion pattern matching |
-| `MC-11030070` | Range Estimation | Driving behaviour coefficients |
+| `SYN-BULLETIN-0001` | HV PTC Heater | Slow insulation fault detection pattern |
+| `SYN-BULLETIN-0002` | HV PTC Heater | Moisture intrusion pattern matching |
+| `SYN-BULLETIN-0003` | Auxiliary Battery | SoH threshold correction pattern |
+| `SYN-BULLETIN-0004` | Auxiliary Battery | False-warning elimination pattern |
+| `SYN-BULLETIN-0005` | DC/DC Converter | Wake-up failure detection pattern |
+| `SYN-BULLETIN-0006` | DC/DC → BMS Cascade | Fault attribution logic |
+| `SYN-BULLETIN-0007` | BMS Fuse Logic | Electronic fuse malfunction tree |
+| `SYN-BULLETIN-0008` | Range Estimation | Minimum range under load |
+| `SYN-BULLETIN-0009` | HV Battery / BMS | General diagnostic tree structure |
+| `SYN-BULLETIN-0010` | Range Estimation | AC load impact coefficients |
+| `SYN-BULLETIN-0011` | Range Estimation | Driving behaviour coefficients |
+| `SYN-BULLETIN-0012` | Thermal Management | Coolant loop diagnostic pattern |
+| `SYN-BULLETIN-0013` | Thermal Management | Refrigerant circuit fault pattern |
+| `SYN-BULLETIN-0014` | HV Charging | AC/DC charge fault isolation pattern |
 
 ---
 

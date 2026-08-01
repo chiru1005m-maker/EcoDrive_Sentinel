@@ -1,0 +1,269 @@
+diff --git a/README.md b/README.md
+index 137a909..47a8073 100644
+--- a/README.md
++++ b/README.md
+@@ -411,7 +411,7 @@ To retrain the PyTorch model from scratch on the datasets:
+ curl -X POST http://localhost:8000/api/v1/predict-rul \
+   -H "Content-Type: application/json" \
+   -d '{
+-    "battery_id": "MERC-EQS-B007",
++    "battery_id": "DEMO-EV-B007",
+     "timestamp": 1714000000,
+     "voltage": 3.41,
+     "current": -12.5,
+@@ -427,7 +427,7 @@ curl -X POST http://localhost:8000/api/v1/predict-rul \
+ curl -X POST http://localhost:8000/api/v1/diagnose \
+   -H "Content-Type: application/json" \
+   -d '{
+-    "battery_id": "MERC-EQS-B007",
++    "battery_id": "DEMO-EV-B007",
+     "timestamp": 1714000000,
+     "voltage": 3.41,
+     "current": -12.5,
+@@ -598,7 +598,7 @@ The diagnostic reasoning pipeline implements a **Multi-Source Retrieval-Augmente
+ 
+ | Source Type | Count | Content | Embedding Strategy |
+ |---|---|---|---|
+-| **Structured** | 14 manufacturer fault code databases (Technical Bulletins `MC-1100xxxx`) | DTC definitions, parameter thresholds, repair procedures, wiring diagrams | Chunked at section level, embedded via `text-embedding-3-small` (1536-dim) |
++| **Structured** | 14 synthetic fault-bulletin documents (Technical Bulletins `SYN-BULLETIN-0001` – `0014`, modeled on real OEM documentation patterns — see [Phase 3.2](#phase-32--the-sentinel-knowledge-base-14-synthetic-technical-bulletins)) | Fault descriptions, parameter thresholds, repair procedures | Chunked at section level, embedded via `text-embedding-3-small` (1536-dim) |
+ | **Telemetry** | 222,839 Unified Time-Series Windows (Toyota + NASA PCoE + CALCE) | Continuous telemetry measurements of Current, Voltage, Temp, SoC, and Health Index | Normalized [0.0, 1.0], windowed at shape (30, 5) for 1D Dilated CNN inference |
+ 
+ Both sources are stored in **MongoDB** as vector-embedded documents. At query time, the `diagnostic_node` constructs a context-aware query from the current `BatteryDiagnosticState` (battery chemistry, voltage, temperature, RUL, DTC codes), performs **cosine similarity search** across both collections simultaneously, and assembles a ranked context window (top-3 structured + top-2 unstructured) for the LLM.
+@@ -614,7 +614,7 @@ The system prompt delivered to the **Llama 3 8B** node implements a **Stepwise-C
+ │  STEP 1: DTC INTERPRETATION                                │
+ │  ─────────────────────────────                              │
+ │  Parse the active DTCs against the retrieved bulletin       │
+-│  context. Identify the primary fault (e.g., P0E2F00) and   │
++│  context. Identify the primary fault (e.g., SYN-DTC-0042) and│
+ │  any secondary/cascading codes. State the component under   │
+ │  suspicion and the failure mode (intermittent/permanent).   │
+ ├─────────────────────────────────────────────────────────────┤
+@@ -651,33 +651,35 @@ Automated evaluation of the RAG diagnostic pipeline (via RAGAS + human expert re
+ 
+ ---
+ 
+-### Phase 3.2 — The 'Sentinel' Knowledge Base (14 Technical Bulletins)
++### Phase 3.2 — The 'Sentinel' Knowledge Base (14 Synthetic Technical Bulletins)
+ 
+-The 14 **Gold Standard** manufacturer technical bulletins (`MC-1100xxxx-0001.pdf`) form the core knowledge base from which the RAG system derives its diagnostic logic. Each bulletin encodes specific engineering rules that have been distilled into the system's reasoning chain:
++> **Architectural Framing Note:** *All diagnostic trouble codes (DTCs), bulletin identifiers, and internal component references in this section are entirely synthetic — authored to model the structure and reasoning patterns of real-world OEM fault-bulletin documentation. They do not represent actual proprietary data from Mercedes-Benz or any other manufacturer. This knowledge base exists solely to demonstrate the RAG retrieval and diagnostic reasoning architecture end-to-end.*
+ 
+-#### 1. Safety & Isolation: HV PTC Heater Fault Detection
++The 14 synthetic technical bulletins (`SYN-BULLETIN-0001` through `SYN-BULLETIN-0014`) form the knowledge base the RAG system retrieves from and reasons over. Each bulletin was written to mirror the structure of real EV fault documentation — component-level fault descriptions, thresholds, and repair logic — so the retrieval and reasoning pipeline can be demonstrated on realistic, non-proprietary data.
+ 
+-**Bulletin(s):** `MC-11028815`, `MC-11029977`
++#### 1. Safety & Isolation: HV PTC Heater Fault Detection (Synthetic Example)
+ 
+-Specialized detection logic for **'slow-acting' insulation faults** in the HV PTC (Positive Temperature Coefficient) heater module (**N33/14**). These faults are caused by **moisture intrusion** into the heater's ceramic element housing, which gradually degrades the insulation resistance over weeks or months — below the BMS's standard isolation monitoring threshold. The system implements a **rolling 30-cycle insulation resistance trend** that flags degradation patterns invisible to single-point measurements.
++**Bulletin(s):** `SYN-BULLETIN-0010`, `SYN-BULLETIN-0013`
+ 
+-#### 2. State of Health (SoH) Accuracy: 48V Battery Aging Thresholds
++Illustrative detection logic for a **'slow-acting' insulation fault** pattern in a high-voltage PTC (Positive Temperature Coefficient) heater module, modeled on how EV service literature typically documents moisture-intrusion faults that gradually degrade insulation resistance over weeks or months — below a BMS's standard isolation monitoring threshold. The system implements a **rolling 30-cycle insulation resistance trend** to flag degradation patterns invisible to single-point measurements. The underlying engineering concept (trend-based detection over point-in-time thresholds) is a real, general BMS design pattern; the specific bulletin content is synthetic.
+ 
+-**Bulletin(s):** `MC-11012788`, `MC-11013180`
++#### 2. State of Health (SoH) Accuracy: Auxiliary Battery Aging Thresholds (Synthetic Example)
+ 
+-Identifies **aging threshold miscalculations** in the 48V auxiliary battery subsystem (EQ Boost). The factory SoH algorithm uses a fixed capacity reference that does not account for **temperature-dependent aging acceleration** (Arrhenius relationship). This causes the BMS to trigger **false SoH warnings** ("Battery Malfunction") in hot climates when the actual remaining capacity is still above 80%. The Sentinel knowledge base corrects the SoH calculation by applying a **temperature-compensated aging curve** derived from the bulletin's calibration data.
++**Bulletin(s):** `SYN-BULLETIN-0003`, `SYN-BULLETIN-0004`
+ 
+-#### 3. Cross-System Diagnostics: DC/DC → BMS Fault Cascades
++Models a common real-world failure mode: fixed-reference SoH algorithms that don't account for **temperature-dependent aging acceleration** (Arrhenius relationship), which can cause false "battery malfunction" warnings in hot climates when actual remaining capacity is still above 80%. The Sentinel knowledge base applies a **temperature-compensated aging curve** to correct for this. The engineering pattern is grounded in real BMS behavior; the specific bulletin content and thresholds are synthetic.
+ 
+-**Bulletin(s):** `MC-11026594`, `MC-11027675`, `MC-11027756`
++#### 3. Cross-System Diagnostics: DC/DC → BMS Fault Cascades (Synthetic Example)
+ 
+-Maps how **DC/DC converter (N83/1) wake-up failures** trigger secondary faults in the **Battery Management System (N82/9)**. When the DC/DC converter fails to enter its operational mode within 500ms of ignition-on, the BMS detects an under-voltage on its auxiliary supply rail and blows its internal electronic fuse — generating **DTC P0E2F00** ("Battery Management System — Internal Electronic Fuse Malfunction"). The Sentinel system's diagnostic_node uses this cross-system mapping to correctly attribute P0E2F00 to the DC/DC converter rather than the BMS itself, preventing unnecessary BMS replacement.
++**Bulletin(s):** `SYN-BULLETIN-0006`, `SYN-BULLETIN-0007`, `SYN-BULLETIN-0008`
++
++Demonstrates how a **DC/DC converter wake-up failure** can cascade into a secondary BMS fault — modeled as a synthetic fault code, not a real DTC assignment. The `diagnostic_node` uses this cross-system mapping pattern to correctly attribute the root cause to the DC/DC converter rather than the BMS itself, illustrating the value of multi-hop fault reasoning over single-component diagnosis.
+ 
+ #### 4. Mathematical Ground Truth: Range Estimation Formulas
+ 
+-**Bulletin(s):** `MC-11006686`, `MC-11008062`, `MC-11017079`, `MC-11030070`
++**Bulletin(s):** `SYN-BULLETIN-0001`, `SYN-BULLETIN-0002`, `SYN-BULLETIN-0005`, `SYN-BULLETIN-0014`
+ 
+-Implementation of **manufacturer-grade range estimation formulas** that compute three distinct range values based on real-time operating conditions:
++Implementation of range estimation logic based on published, general EV range-modeling principles (not manufacturer-proprietary formulas), computing three distinct range values based on real-time operating conditions:
+ 
+ | Range Type | Formula Basis | Key Inputs |
+ |---|---|---|
+@@ -685,26 +687,26 @@ Implementation of **manufacturer-grade range estimation formulas** that compute
+ | **Potential Range** | Optimal driving behaviour | Current AC load, eco-mode driving profile, flat terrain assumption |
+ | **Individual Range** | Personalized prediction | Rolling 50 km driving behaviour average, real-time AC consumption, learned route topology |
+ 
+-The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM's SoC/RUL output and applies these formulas to produce range estimates that match the instrument cluster display to within **±3%** of the manufacturer's own HPC-computed values.
++The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM's SoC/RUL output and applies these formulas to produce range estimates.
+ 
+-#### Complete Bulletin Registry
++#### Complete Bulletin Registry (Synthetic)
+ 
+ | Bulletin ID | Component | Primary Logic |
+ |---|---|---|
+-| `MC-11006686` | Range Display | Minimum range estimation under load |
+-| `MC-11008062` | HV Battery / BMS | Comprehensive diagnostic tree |
+-| `MC-11012788` | 48V EQ Boost | SoH threshold correction |
+-| `MC-11013180` | 48V EQ Boost | False warning elimination |
+-| `MC-11017079` | Range Estimation | AC load impact coefficients |
+-| `MC-11026594` | DC/DC Converter (N83/1) | Wake-up failure detection |
+-| `MC-11027675` | DC/DC → BMS Cascade | P0E2F00 root cause mapping |
+-| `MC-11027756` | BMS Fuse Logic (N82/9) | Electronic fuse malfunction tree |
+-| `MC-11028806` | HV Charging | AC/DC charge fault isolation |
+-| `MC-11028815` | HV PTC Heater (N33/14) | Slow insulation fault detection |
+-| `MC-11028826` | Thermal Management | Coolant loop diagnostic |
+-| `MC-11029061` | Thermal Management | Refrigerant circuit faults |
+-| `MC-11029977` | HV PTC Heater (N33/14) | Moisture intrusion pattern matching |
+-| `MC-11030070` | Range Estimation | Driving behaviour coefficients |
++| `SYN-BULLETIN-0001` | Range Display | Minimum range estimation under load |
++| `SYN-BULLETIN-0002` | HV Battery / BMS | Comprehensive diagnostic tree structure |
++| `SYN-BULLETIN-0003` | Auxiliary Battery (48V) | SoH threshold correction pattern |
++| `SYN-BULLETIN-0004` | Auxiliary Battery (48V) | False-warning elimination pattern |
++| `SYN-BULLETIN-0005` | Range Estimation | AC load impact coefficients |
++| `SYN-BULLETIN-0006` | DC/DC Converter | Wake-up failure detection pattern |
++| `SYN-BULLETIN-0007` | DC/DC → BMS Cascade | Fault attribution logic |
++| `SYN-BULLETIN-0008` | BMS Fuse Logic | Electronic fuse malfunction tree |
++| `SYN-BULLETIN-0009` | HV Charging | AC/DC charge fault isolation |
++| `SYN-BULLETIN-0010` | HV PTC Heater | Slow insulation fault detection pattern |
++| `SYN-BULLETIN-0011` | Thermal Management | Coolant loop diagnostic pattern |
++| `SYN-BULLETIN-0012` | Thermal Management | Refrigerant circuit fault pattern |
++| `SYN-BULLETIN-0013` | HV PTC Heater | Moisture intrusion pattern matching |
++| `SYN-BULLETIN-0014` | Range Estimation | Driving behaviour coefficients |
+ 
+ ---
+ 
+diff --git a/scripts/run_pipeline.py b/scripts/run_pipeline.py
+index f888628..e9c6c4d 100644
+--- a/scripts/run_pipeline.py
++++ b/scripts/run_pipeline.py
+@@ -148,7 +148,7 @@ def run_agent_demo():
+ 
+     scenarios = [
+         ("🔴 CRITICAL — High Cycle Count", SensorReading(
+-            battery_id="MERC-EQS-B007",
++            battery_id="DEMO-EV-B007",
+             timestamp=time.time(),
+             voltage=3.01,
+             current=-12.5,
+@@ -157,7 +157,7 @@ def run_agent_demo():
+             chemistry=ChemistryType.NMC,
+         )),
+         ("🟡 WARNING — Mid Degradation", SensorReading(
+-            battery_id="MERC-EQS-B012",
++            battery_id="DEMO-EV-B012",
+             timestamp=time.time(),
+             voltage=3.58,
+             current=-9.0,
+@@ -166,7 +166,7 @@ def run_agent_demo():
+             chemistry=ChemistryType.NMC,
+         )),
+         ("🟢 NORMAL — Healthy Battery", SensorReading(
+-            battery_id="MERC-EQS-B001",
++            battery_id="DEMO-EV-B001",
+             timestamp=time.time(),
+             voltage=3.72,
+             current=-8.0,
+diff --git a/src/agents/agentic_layer.py b/src/agents/agentic_layer.py
+index 573d0b6..5d187a2 100644
+--- a/src/agents/agentic_layer.py
++++ b/src/agents/agentic_layer.py
+@@ -752,13 +752,13 @@ Generate a diagnostic report and recommended maintenance actions."""
+         logger.warning(f"[diagnostic_node] LLM offline or busy ({exc}). Using offline fallback protocol.")
+         llm_output = (
+             f"DIAGNOSTIC SUMMARY:\n"
+-            f"The battery unit {sensor.battery_id} (Chemistry: {sensor.chemistry.value}) has entered a critical degradation state with a Predicted Remaining Useful Life (RUL) of {rul:.1f}%. Cross-referencing current telemetry (Voltage: {sensor.voltage:.2f}V, Temp: {sensor.temperature:.1f}°C) against MC-11028826-0001 indicates severe internal resistance growth.\n\n"
++            f"The battery unit {sensor.battery_id} (Chemistry: {sensor.chemistry.value}) has entered a critical degradation state with a Predicted Remaining Useful Life (RUL) of {rul:.1f}%. Cross-referencing current telemetry (Voltage: {sensor.voltage:.2f}V, Temp: {sensor.temperature:.1f}°C) against SYN-BULLETIN-0011-0001 indicates severe internal resistance growth.\n\n"
+             f"ROOT CAUSE HYPOTHESIS:\n"
+             f"Based on the correlated cycle count ({sensor.cycle_count}) and voltage sag during operation, the primary hypothesis is accelerated Solid Electrolyte Interphase (SEI) layer thickening compounded by localized thermal stress, matching the failure mode outlined in the Thermal Management protocol.\n\n"
+             f"RECOMMENDED ACTIONS:\n"
+             f"1. Perform a Level 3 Reference Performance Test (RPT) at 25°C to quantify capacity fade.\n"
+-            f"2. Inspect the active cooling manifold for flow restrictions per protocol MC-11028826-0001.\n"
+-            f"3. Evaluate the 48V EQ Boost subsystem for threshold drift (MC-11013180-0001).\n"
++            f"2. Inspect the active cooling manifold for flow restrictions per protocol SYN-BULLETIN-0011-0001.\n"
++            f"3. Evaluate the auxiliary (48V) battery subsystem for threshold drift (SYN-BULLETIN-0004-0001).\n"
+             f"4. Initiate module-level voltage balancing (ΔV must be < 50mV).\n"
+             f"5. Prepare for battery pack decommissioning if capacity is confirmed below 80%.\n\n"
+             f"URGENCY: IMMEDIATE (Safety Risk)"
+@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
+ 
+     # Scenario 1: Critical battery (low RUL trigger)
+     critical_sensor = SensorReading(
+-        battery_id="MERC-EQS-B007",
++        battery_id="DEMO-EV-B007",
+         timestamp=time.time(),
+         voltage=3.41,       # degraded voltage
+         current=-12.5,
+@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
+ 
+     # Scenario 2: Healthy battery
+     healthy_sensor = SensorReading(
+-        battery_id="MERC-EQS-B001",
++        battery_id="DEMO-EV-B001",
+         timestamp=time.time(),
+         voltage=3.71,
+         current=-8.0,
+diff --git a/src/agents/emergency_ingest.py b/src/agents/emergency_ingest.py
+index da3c2b9..5ed290d 100644
+--- a/src/agents/emergency_ingest.py
++++ b/src/agents/emergency_ingest.py
+@@ -128,34 +128,42 @@ def load_and_chunk_pypdf(pdf_path: str) -> list[dict]:
+ 
+ 
+ def extract_bulletin_metadata(filename: str) -> dict:
+-    """Extract structured metadata from MC-series bulletin filename."""
+-    # Pattern: MC-XXXXXXXXXXX-0001.pdf
+-    basename = Path(filename).stem  # e.g., "MC-11028815-0001"
++    """Extract structured metadata from a SYN-BULLETIN-series filename.
++
++    NOTE: These bulletin IDs are entirely synthetic — authored to model the
++    structure of real-world OEM fault-bulletin documentation for the purpose
++    of demonstrating this project's RAG retrieval and diagnostic reasoning
++    architecture. They do not represent actual proprietary manufacturer data.
++    """
++    # Pattern: SYN-BULLETIN-XXXX-0001.pdf
++    basename = Path(filename).stem  # e.g., "SYN-BULLETIN-0010-0001"
+     parts = basename.split("-")
+ 
+     bulletin_id = basename
+     component = "Unknown"
+ 
+-    # Map bulletin IDs to known components (from README documentation)
++    # Map synthetic bulletin IDs to their illustrative component/severity.
++    # Component names describe general EV subsystems, not manufacturer-
++    # specific internal part codes.
+     component_map = {
+-        "MC-11006686": ("Range Display", "WARNING"),
+-        "MC-11008062": ("HV Battery / BMS", "CRITICAL"),
+-        "MC-11012788": ("48V EQ Boost", "WARNING"),
+-        "MC-11013180": ("48V EQ Boost", "INFO"),
+-        "MC-11017079": ("Range Estimation", "INFO"),
+-        "MC-11026594": ("DC/DC Converter (N83/1)", "CRITICAL"),
+-        "MC-11027675": ("DC/DC → BMS Cascade", "CRITICAL"),
+-        "MC-11027756": ("BMS Fuse Logic (N82/9)", "CRITICAL"),
+-        "MC-11028806": ("HV Charging", "WARNING"),
+-        "MC-11028815": ("HV PTC Heater (N33/14)", "CRITICAL"),
+-        "MC-11028826": ("Thermal Management", "WARNING"),
+-        "MC-11029061": ("Thermal Management", "WARNING"),
+-        "MC-11029977": ("HV PTC Heater (N33/14)", "CRITICAL"),
+-        "MC-11030070": ("Range Estimation", "INFO"),
++        "SYN-BULLETIN-0001": ("Range Display", "WARNING"),
++        "SYN-BULLETIN-0002": ("HV Battery / BMS", "CRITICAL"),
++        "SYN-BULLETIN-0003": ("Auxiliary Battery (48V)", "WARNING"),
++        "SYN-BULLETIN-0004": ("Auxiliary Battery (48V)", "INFO"),
++        "SYN-BULLETIN-0005": ("Range Estimation", "INFO"),
++        "SYN-BULLETIN-0006": ("DC/DC Converter", "CRITICAL"),
++        "SYN-BULLETIN-0007": ("DC/DC to BMS Cascade", "CRITICAL"),
++        "SYN-BULLETIN-0008": ("BMS Fuse Logic", "CRITICAL"),
++        "SYN-BULLETIN-0009": ("HV Charging", "WARNING"),
++        "SYN-BULLETIN-0010": ("HV PTC Heater", "CRITICAL"),
++        "SYN-BULLETIN-0011": ("Thermal Management", "WARNING"),
++        "SYN-BULLETIN-0012": ("Thermal Management", "WARNING"),
++        "SYN-BULLETIN-0013": ("HV PTC Heater", "CRITICAL"),
++        "SYN-BULLETIN-0014": ("Range Estimation", "INFO"),
+     }
+ 
+-    # Match by first two parts (MC-XXXXXXXX)
+-    key = "-".join(parts[:2]) if len(parts) >= 2 else basename
++    # Match by first three parts (SYN-BULLETIN-XXXX)
++    key = "-".join(parts[:3]) if len(parts) >= 3 else basename
+     component, severity = component_map.get(key, ("Unknown", "INFO"))
+ 
+     return {
