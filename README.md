@@ -411,7 +411,7 @@ To retrain the PyTorch model from scratch on the datasets:
 curl -X POST http://localhost:8000/api/v1/predict-rul \
   -H "Content-Type: application/json" \
   -d '{
-    "battery_id": "MERC-EQS-B007",
+    "battery_id": "DEMO-EV-B007",
     "timestamp": 1714000000,
     "voltage": 3.41,
     "current": -12.5,
@@ -427,7 +427,7 @@ curl -X POST http://localhost:8000/api/v1/predict-rul \
 curl -X POST http://localhost:8000/api/v1/diagnose \
   -H "Content-Type: application/json" \
   -d '{
-    "battery_id": "MERC-EQS-B007",
+    "battery_id": "DEMO-EV-B007",
     "timestamp": 1714000000,
     "voltage": 3.41,
     "current": -12.5,
@@ -598,7 +598,7 @@ The diagnostic reasoning pipeline implements a **Multi-Source Retrieval-Augmente
 
 | Source Type | Count | Content | Embedding Strategy |
 |---|---|---|---|
-| **Structured** | 14 manufacturer fault code databases (Technical Bulletins `MC-1100xxxx`) | DTC definitions, parameter thresholds, repair procedures, wiring diagrams | Chunked at section level, embedded via `text-embedding-3-small` (1536-dim) |
+| **Structured** | 14 synthetic fault-bulletin documents (Technical Bulletins `SYN-BULLETIN-0001` – `0014`, modeled on real OEM documentation patterns — see [Phase 3.2](#phase-32--the-sentinel-knowledge-base-14-synthetic-technical-bulletins)) | Fault descriptions, parameter thresholds, repair procedures | Chunked at section level, embedded via `text-embedding-3-small` (1536-dim) |
 | **Telemetry** | 222,839 Unified Time-Series Windows (Toyota + NASA PCoE + CALCE) | Continuous telemetry measurements of Current, Voltage, Temp, SoC, and Health Index | Normalized [0.0, 1.0], windowed at shape (30, 5) for 1D Dilated CNN inference |
 
 Both sources are stored in **MongoDB** as vector-embedded documents. At query time, the `diagnostic_node` constructs a context-aware query from the current `BatteryDiagnosticState` (battery chemistry, voltage, temperature, RUL, DTC codes), performs **cosine similarity search** across both collections simultaneously, and assembles a ranked context window (top-3 structured + top-2 unstructured) for the LLM.
@@ -614,7 +614,7 @@ The system prompt delivered to the **Llama 3 8B** node implements a **Stepwise-C
 │  STEP 1: DTC INTERPRETATION                                │
 │  ─────────────────────────────                              │
 │  Parse the active DTCs against the retrieved bulletin       │
-│  context. Identify the primary fault (e.g., P0E2F00) and   │
+│  context. Identify the primary fault (e.g., SYN-DTC-0042) and│
 │  any secondary/cascading codes. State the component under   │
 │  suspicion and the failure mode (intermittent/permanent).   │
 ├─────────────────────────────────────────────────────────────┤
@@ -651,60 +651,62 @@ Automated evaluation of the RAG diagnostic pipeline (via RAGAS + human expert re
 
 ---
 
-### Phase 3.2 — The 'Sentinel' Knowledge Base (14 Technical Bulletins)
+### Phase 3.2 — The 'Sentinel' Knowledge Base (14 Synthetic Technical Bulletins)
 
-> **Architectural Framing Note:** *All diagnostic trouble codes (DTCs), bulletin identifiers, and OEM-style documentation referenced in this section are entirely synthetic — authored by me to model the structure and reasoning patterns of real-world automotive fault-code documentation. They do not represent actual proprietary Mercedes-Benz or any other manufacturer's internal data. This knowledge base exists solely to demonstrate the RAG retrieval and diagnostic reasoning architecture.*
+> **Architectural Framing Note:** *All diagnostic trouble codes (DTCs), bulletin identifiers, and internal component references in this section are entirely synthetic — authored to model the structure and reasoning patterns of real-world OEM fault-bulletin documentation. They do not represent actual proprietary data from Mercedes-Benz or any other manufacturer. This knowledge base exists solely to demonstrate the RAG retrieval and diagnostic reasoning architecture end-to-end.*
 
-The 14 synthetic technical bulletins (`SYN-BULLETIN-0001` through `SYN-BULLETIN-0014`) form the knowledge base the RAG system retrieves from. Each bulletin was written to mirror the structure of real OEM fault documentation — DTC-style codes, component references, and repair logic — so the retrieval and reasoning pipeline can be demonstrated end-to-end on realistic (not real) data.
+The 14 synthetic technical bulletins (`SYN-BULLETIN-0001` through `SYN-BULLETIN-0014`) form the knowledge base the RAG system retrieves from and reasons over. Each bulletin was written to mirror the structure of real EV fault documentation — component-level fault descriptions, thresholds, and repair logic — so the retrieval and reasoning pipeline can be demonstrated on realistic, non-proprietary data.
 
 #### 1. Safety & Isolation: HV PTC Heater Fault Detection (Synthetic Example)
 
-**Bulletin(s):** `SYN-BULLETIN-0001`, `SYN-BULLETIN-0002`
+**Bulletin(s):** `SYN-BULLETIN-0010`, `SYN-BULLETIN-0013`
 
-Illustrative detection logic for a 'slow-acting' insulation fault pattern in a high-voltage PTC heater module, modeled on how such faults are typically documented in EV service literature. Demonstrates a rolling 30-cycle insulation resistance trend to flag degradation invisible to single-point measurements — the underlying engineering concept (trend-based detection over point-in-time thresholds) is real; the specific bulletin content is synthetic.
+Illustrative detection logic for a **'slow-acting' insulation fault** pattern in a high-voltage PTC (Positive Temperature Coefficient) heater module, modeled on how EV service literature typically documents moisture-intrusion faults that gradually degrade insulation resistance over weeks or months — below a BMS's standard isolation monitoring threshold. The system implements a **rolling 30-cycle insulation resistance trend** to flag degradation patterns invisible to single-point measurements. The underlying engineering concept (trend-based detection over point-in-time thresholds) is a real, general BMS design pattern; the specific bulletin content is synthetic.
 
 #### 2. State of Health (SoH) Accuracy: Auxiliary Battery Aging Thresholds (Synthetic Example)
 
 **Bulletin(s):** `SYN-BULLETIN-0003`, `SYN-BULLETIN-0004`
 
-Models a common real-world failure mode: fixed-reference SoH algorithms that don't account for temperature-dependent aging acceleration (Arrhenius relationship), causing false "battery malfunction" warnings in hot climates. The Sentinel system applies a temperature-compensated aging curve to correct for this — again, the engineering pattern is grounded in real BMS behavior; the specific bulletin numbers and thresholds are synthetic.
+Models a common real-world failure mode: fixed-reference SoH algorithms that don't account for **temperature-dependent aging acceleration** (Arrhenius relationship), which can cause false "battery malfunction" warnings in hot climates when actual remaining capacity is still above 80%. The Sentinel knowledge base applies a **temperature-compensated aging curve** to correct for this. The engineering pattern is grounded in real BMS behavior; the specific bulletin content and thresholds are synthetic.
 
 #### 3. Cross-System Diagnostics: DC/DC → BMS Fault Cascades (Synthetic Example)
 
-**Bulletin(s):** `SYN-BULLETIN-0005`, `SYN-BULLETIN-0006`, `SYN-BULLETIN-0007`
+**Bulletin(s):** `SYN-BULLETIN-0006`, `SYN-BULLETIN-0007`, `SYN-BULLETIN-0008`
 
-Demonstrates how a DC/DC converter wake-up failure can cascade into a secondary BMS fault — modeled as `SYN-DTC-P0E2F00` (a synthetic code, not a real DTC assignment). The `diagnostic_node` uses this cross-system mapping pattern to correctly attribute the root cause to the DC/DC converter rather than the BMS itself, illustrating the value of multi-hop fault reasoning rather than single-component diagnosis.
+Demonstrates how a **DC/DC converter wake-up failure** can cascade into a secondary BMS fault — modeled as a synthetic fault code, not a real DTC assignment. The `diagnostic_node` uses this cross-system mapping pattern to correctly attribute the root cause to the DC/DC converter rather than the BMS itself, illustrating the value of multi-hop fault reasoning over single-component diagnosis.
 
 #### 4. Mathematical Ground Truth: Range Estimation Formulas
 
-**Bulletin(s):** `SYN-BULLETIN-0008` through `SYN-BULLETIN-0011`
+**Bulletin(s):** `SYN-BULLETIN-0001`, `SYN-BULLETIN-0002`, `SYN-BULLETIN-0005`, `SYN-BULLETIN-0014`
 
-Range estimation logic based on published, general EV range-modeling principles (not manufacturer-proprietary formulas): three distinct range values computed from real-time operating conditions.
+Implementation of range estimation logic based on published, general EV range-modeling principles (not manufacturer-proprietary formulas), computing three distinct range values based on real-time operating conditions:
 
 | Range Type | Formula Basis | Key Inputs |
 |---|---|---|
-| Minimum Range | Worst-case energy budget | Max AC load, aggressive driving profile, uphill gradient |
-| Potential Range | Optimal driving behaviour | Current AC load, eco-mode profile, flat terrain assumption |
-| Individual Range | Personalized prediction | Rolling 50 km driving average, real-time AC consumption, learned route topology |
+| **Minimum Range** | Worst-case energy budget | Max AC load (defrost + heated seats), aggressive driving profile (high acceleration frequency), uphill gradient |
+| **Potential Range** | Optimal driving behaviour | Current AC load, eco-mode driving profile, flat terrain assumption |
+| **Individual Range** | Personalized prediction | Rolling 50 km driving behaviour average, real-time AC consumption, learned route topology |
+
+The `range_estimation_node` in the LangGraph state machine consumes the CNN-LSTM's SoC/RUL output and applies these formulas to produce range estimates.
 
 #### Complete Bulletin Registry (Synthetic)
 
 | Bulletin ID | Component | Primary Logic |
 |---|---|---|
-| `SYN-BULLETIN-0001` | HV PTC Heater | Slow insulation fault detection pattern |
-| `SYN-BULLETIN-0002` | HV PTC Heater | Moisture intrusion pattern matching |
-| `SYN-BULLETIN-0003` | Auxiliary Battery | SoH threshold correction pattern |
-| `SYN-BULLETIN-0004` | Auxiliary Battery | False-warning elimination pattern |
-| `SYN-BULLETIN-0005` | DC/DC Converter | Wake-up failure detection pattern |
-| `SYN-BULLETIN-0006` | DC/DC → BMS Cascade | Fault attribution logic |
-| `SYN-BULLETIN-0007` | BMS Fuse Logic | Electronic fuse malfunction tree |
-| `SYN-BULLETIN-0008` | Range Estimation | Minimum range under load |
-| `SYN-BULLETIN-0009` | HV Battery / BMS | General diagnostic tree structure |
-| `SYN-BULLETIN-0010` | Range Estimation | AC load impact coefficients |
-| `SYN-BULLETIN-0011` | Range Estimation | Driving behaviour coefficients |
-| `SYN-BULLETIN-0012` | Thermal Management | Coolant loop diagnostic pattern |
-| `SYN-BULLETIN-0013` | Thermal Management | Refrigerant circuit fault pattern |
-| `SYN-BULLETIN-0014` | HV Charging | AC/DC charge fault isolation pattern |
+| `SYN-BULLETIN-0001` | Range Display | Minimum range estimation under load |
+| `SYN-BULLETIN-0002` | HV Battery / BMS | Comprehensive diagnostic tree structure |
+| `SYN-BULLETIN-0003` | Auxiliary Battery (48V) | SoH threshold correction pattern |
+| `SYN-BULLETIN-0004` | Auxiliary Battery (48V) | False-warning elimination pattern |
+| `SYN-BULLETIN-0005` | Range Estimation | AC load impact coefficients |
+| `SYN-BULLETIN-0006` | DC/DC Converter | Wake-up failure detection pattern |
+| `SYN-BULLETIN-0007` | DC/DC → BMS Cascade | Fault attribution logic |
+| `SYN-BULLETIN-0008` | BMS Fuse Logic | Electronic fuse malfunction tree |
+| `SYN-BULLETIN-0009` | HV Charging | AC/DC charge fault isolation |
+| `SYN-BULLETIN-0010` | HV PTC Heater | Slow insulation fault detection pattern |
+| `SYN-BULLETIN-0011` | Thermal Management | Coolant loop diagnostic pattern |
+| `SYN-BULLETIN-0012` | Thermal Management | Refrigerant circuit fault pattern |
+| `SYN-BULLETIN-0013` | HV PTC Heater | Moisture intrusion pattern matching |
+| `SYN-BULLETIN-0014` | Range Estimation | Driving behaviour coefficients |
 
 ---
 
