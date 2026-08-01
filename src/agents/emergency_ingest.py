@@ -128,34 +128,42 @@ def load_and_chunk_pypdf(pdf_path: str) -> list[dict]:
 
 
 def extract_bulletin_metadata(filename: str) -> dict:
-    """Extract structured metadata from MC-series bulletin filename."""
-    # Pattern: MC-XXXXXXXXXXX-0001.pdf
-    basename = Path(filename).stem  # e.g., "MC-11028815-0001"
+    """Extract structured metadata from a SYN-BULLETIN-series filename.
+
+    NOTE: These bulletin IDs are entirely synthetic — authored to model the
+    structure of real-world OEM fault-bulletin documentation for the purpose
+    of demonstrating this project's RAG retrieval and diagnostic reasoning
+    architecture. They do not represent actual proprietary manufacturer data.
+    """
+    # Pattern: SYN-BULLETIN-XXXX-0001.pdf
+    basename = Path(filename).stem  # e.g., "SYN-BULLETIN-0010-0001"
     parts = basename.split("-")
 
     bulletin_id = basename
     component = "Unknown"
 
-    # Map bulletin IDs to known components (from README documentation)
+    # Map synthetic bulletin IDs to their illustrative component/severity.
+    # Component names describe general EV subsystems, not manufacturer-
+    # specific internal part codes.
     component_map = {
-        "MC-11006686": ("Range Display", "WARNING"),
-        "MC-11008062": ("HV Battery / BMS", "CRITICAL"),
-        "MC-11012788": ("48V EQ Boost", "WARNING"),
-        "MC-11013180": ("48V EQ Boost", "INFO"),
-        "MC-11017079": ("Range Estimation", "INFO"),
-        "MC-11026594": ("DC/DC Converter (N83/1)", "CRITICAL"),
-        "MC-11027675": ("DC/DC → BMS Cascade", "CRITICAL"),
-        "MC-11027756": ("BMS Fuse Logic (N82/9)", "CRITICAL"),
-        "MC-11028806": ("HV Charging", "WARNING"),
-        "MC-11028815": ("HV PTC Heater (N33/14)", "CRITICAL"),
-        "MC-11028826": ("Thermal Management", "WARNING"),
-        "MC-11029061": ("Thermal Management", "WARNING"),
-        "MC-11029977": ("HV PTC Heater (N33/14)", "CRITICAL"),
-        "MC-11030070": ("Range Estimation", "INFO"),
+        "SYN-BULLETIN-0001": ("Range Display", "WARNING"),
+        "SYN-BULLETIN-0002": ("HV Battery / BMS", "CRITICAL"),
+        "SYN-BULLETIN-0003": ("Auxiliary Battery (48V)", "WARNING"),
+        "SYN-BULLETIN-0004": ("Auxiliary Battery (48V)", "INFO"),
+        "SYN-BULLETIN-0005": ("Range Estimation", "INFO"),
+        "SYN-BULLETIN-0006": ("DC/DC Converter", "CRITICAL"),
+        "SYN-BULLETIN-0007": ("DC/DC to BMS Cascade", "CRITICAL"),
+        "SYN-BULLETIN-0008": ("BMS Fuse Logic", "CRITICAL"),
+        "SYN-BULLETIN-0009": ("HV Charging", "WARNING"),
+        "SYN-BULLETIN-0010": ("HV PTC Heater", "CRITICAL"),
+        "SYN-BULLETIN-0011": ("Thermal Management", "WARNING"),
+        "SYN-BULLETIN-0012": ("Thermal Management", "WARNING"),
+        "SYN-BULLETIN-0013": ("HV PTC Heater", "CRITICAL"),
+        "SYN-BULLETIN-0014": ("Range Estimation", "INFO"),
     }
 
-    # Match by first two parts (MC-XXXXXXXX)
-    key = "-".join(parts[:2]) if len(parts) >= 2 else basename
+    # Match by first three parts (SYN-BULLETIN-XXXX)
+    key = "-".join(parts[:3]) if len(parts) >= 3 else basename
     component, severity = component_map.get(key, ("Unknown", "INFO"))
 
     return {
